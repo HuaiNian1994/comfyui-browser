@@ -13,10 +13,10 @@
 <script lang="ts">
 import { defineComponent } from 'vue'
 import Navbar from './components/Navbar/Navbar.vue'
-import FilesTab from './views/Files/FilesTab.vue'
-import CollectionsTab from './views/Collections/CollectionsTab.vue'
-import SourcesTab from './views/Sources/SourcesTab.vue'
-import ModelsTab from './views/Models/ModelsTab.vue'
+import FilesTab from './components/Files/FilesTab.vue'
+import CollectionsTab from './components/Collections/CollectionsTab.vue'
+import SourcesTab from './components/Sources/SourcesTab.vue'
+import ModelsTab from './components/Models/ModelsTab.vue'
 
 export default defineComponent({
   name: 'App',

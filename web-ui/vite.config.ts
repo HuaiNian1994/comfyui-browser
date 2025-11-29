@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [vue()],
   base: './',
   build: {
-    outDir: '../web/build',
+    outDir: './release',
     emptyOutDir: true,
     minify: mode === 'production',
     sourcemap: mode === 'development',

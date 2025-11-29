@@ -5,3 +5,4 @@ sources/
 .DS_Store
 download_logs/
 web/build/
+web-ui/release/

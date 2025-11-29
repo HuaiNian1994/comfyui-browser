@@ -4,8 +4,7 @@ from aiohttp import web
 import server
 
 from .utils import collections_path, browser_path, sources_path, download_logs_path, outputs_path
-from .routes import sources, collections, config, files, downloads, xyz_plot as xyz_plot_routes
-from .nodes import select_inputs, load_image_by_url, xyz_plot, dify_text_generator, upload_to_remote
+from .routes import sources, collections, config, files, downloads
 
 
 browser_app = web.Application()
@@ -32,10 +31,7 @@ browser_app.add_routes([
     web.get("/downloads", downloads.api_list_downloads),
     web.get("/downloads/{uuid}", downloads.api_show_download),
 
-    web.put("/xyz_plot/score", xyz_plot_routes.api_update_score),
-    web.get("/xyz_plot/statistic", xyz_plot_routes.api_get_score_statistic),
-
-    web.static("/web", os.path.join(browser_path, 'web/build')),
+    web.static("/web", os.path.join(browser_path, 'web-ui/release')),
 
     web.static("/s/outputs", outputs_path()),
     web.static("/s/collections", collections_path()),
@@ -43,18 +39,8 @@ browser_app.add_routes([
 ])
 server.PromptServer.instance.app.add_subapp("/browser/", browser_app)
 
-WEB_DIRECTORY = "web"
+WEB_DIRECTORY = "web-ui"
 NODE_CLASS_MAPPINGS = {
-    "LoadImageByUrl //Browser": load_image_by_url.LoadImageByUrl,
-    "SelectInputs //Browser": select_inputs.SelectInputs,
-    "XyzPlot //Browser": xyz_plot.XyzPlot,
-    "DifyTextGenerator //Browser": dify_text_generator.DifyTextGenerator,
-    "UploadToRemote //Browser": upload_to_remote.UploadToRemote,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "LoadImageByUrl //Browser": "Load Image By URL",
-    "SelectInputs //Browser": "Select Node Inputs",
-    "XyzPlot //Browser": "XYZ Plot",
-    "DifyTextGenerator //Browser": "Dify Text Generator",
-    "UploadToRemote //Browser": "Upload To Remote",
 }

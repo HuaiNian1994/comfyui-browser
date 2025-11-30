@@ -18,9 +18,15 @@ export default defineConfig(({ mode }) => ({
     },
   },
   server: {
+    port: 5890,
+    open: true,
+    host: '0.0.0.0',
     proxy: {
       '/browser': {
-        target: 'http://127.0.0.1:8000',
+        /**
+         * comfyUI 服务端地址
+         */
+        target: process.env.COMFYUI_SERVER_URL || 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
     },

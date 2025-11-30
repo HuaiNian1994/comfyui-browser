@@ -6,3 +6,4 @@ sources/
 download_logs/
 web/build/
 web-ui/release/
+*.md

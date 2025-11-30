@@ -1,6 +1,6 @@
 # ComfyUI 浏览器
 
-查看和管理 ComfyUI 的所有输出文件，并且添加收藏方便随时调用。
+查看和管理 ComfyUI 涉及的文件，并且添加收藏方便随时调用。
 
 远程同步工作流到你的 Git 仓库，方便团队共享和版本管理。
 
@@ -22,10 +22,7 @@ https://www.bilibili.com/video/BV1qc411m7Gp/
 
 ## 预览
 
-![b359de5f6556649512e7ed8f812ba67d444be9914173e2467018450ce1a3ce1d](https://github.com/talesofai/comfyui-browser/assets/828837/4b0b0f4c-28a8-49ef-98c2-d293df5b7747)
-![c91157bf819ef5b9a129976d9e45588106dd6c7ea39ecb0a22519acd72afc7ce](https://github.com/talesofai/comfyui-browser/assets/828837/ee3df970-017c-4825-ab5d-9465cdb77ed6)
-![53053f43847da9597efebab207140eed703b8c7bbe8eb1e63ce5630b5d8c9a3f](https://github.com/talesofai/comfyui-browser/assets/828837/4acb522a-f21c-47ad-9a23-56b08c6e73a5)
-![c7b93b2ec0891eb7cac1385505e855fb28934ec958f7b21cac53c9bf18e6136c](https://github.com/talesofai/comfyui-browser/assets/828837/ef0d5cd2-9238-4e80-9f65-0f7db05ffbf3)
+
 
 ## 安装方式
 
@@ -47,17 +44,16 @@ cd custom_nodes && git clone https://github.com/tzwm/comfyui-browser.git
 
 - 使用的框架
 
-  - 前端: [Svelte](https://kit.svelte.dev/)
+  - 前端: vite+vue3+ts+element plus+pnpm
   - 后端: [aiohttp](https://docs.aiohttp.org/)(和 ComfyUI 一样)
 
 - 目录介绍
 
 ```
 ├── __init__.py  (后端服务)
-├── web          (ComfyUI 加载的前端路径)
-    ├── build    (Svelte 的生成文件)
+├── web-ui       (ComfyUI 加载的前端代码)
+    ├── build    (Vite 的生成文件)
     └── index.js (和 ComfyUI 交互的前端代码)
-├── svelte       (前端主体部分)
 ```
 
 - 开发和调试

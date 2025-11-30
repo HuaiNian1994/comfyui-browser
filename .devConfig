@@ -1,0 +1,3 @@
+COMFYUI_INSTALL_PATH=D:\Program Files\ComfyUI
+COMFYUI_RUNTIME_PATH=C:\Users\HuaiNian\Documents\comfy-ui-runtime-files
+COMFYUI_SERVER_URL=http://127.0.0.1:8000

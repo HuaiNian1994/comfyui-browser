@@ -1,17 +1,25 @@
 <template>
-  <div class="app-container">
-    <Navbar :active-tab="activeTab" @update:active-tab="handleTabChange" />
-    
-    <div class="content-container">
-      <keep-alive>
-        <component :is="currentTabComponent" />
-      </keep-alive>
+  <el-config-provider :locale="elLocale">
+    <div class="app-container">
+      <Navbar :active-tab="activeTab" @update:active-tab="handleTabChange" />
+      
+      <div class="content-container">
+        <keep-alive>
+          <component :is="currentTabComponent" />
+        </keep-alive>
+      </div>
     </div>
-  </div>
+  </el-config-provider>
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { defineComponent, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { ElConfigProvider } from 'element-plus'
+// @ts-ignore
+import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
+// @ts-ignore
+import en from 'element-plus/dist/locale/en.mjs'
 import Navbar from './components/Navbar/Navbar.vue'
 import FilesTab from './components/Files/FilesTab.vue'
 import CollectionsTab from './components/Collections/CollectionsTab.vue'
@@ -21,11 +29,23 @@ import ModelsTab from './components/Models/ModelsTab.vue'
 export default defineComponent({
   name: 'App',
   components: {
+    ElConfigProvider,
     Navbar,
     FilesTab,
     CollectionsTab,
     SourcesTab,
     ModelsTab
+  },
+  setup() {
+    const { locale } = useI18n()
+    
+    const elLocale = computed(() => {
+      return locale.value === 'zh-CN' ? zhCn : en
+    })
+
+    return {
+      elLocale
+    }
   },
   data() {
     return {

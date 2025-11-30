@@ -1,5 +1,28 @@
 <template>
   <div class="file-card-list">
+    <!-- 顶部工具栏 -->
+    <div class="list-toolbar">
+      <div class="toolbar-items">
+        <div class="header-slot">
+          <slot name="header"></slot>
+        </div>
+        <el-input v-model="internalSearchQuery" :placeholder="t('common.searchPlaceholder')" clearable
+          class="search-input">
+          <template #prefix>
+            <el-icon>
+              <Search />
+            </el-icon>
+          </template>
+        </el-input>
+        <div class="spacer"></div>
+        <!-- 分页器 -->
+        <el-pagination v-if="pagination && filteredFiles.length > 0" v-model:current-page="currentPage"
+          v-model:page-size="internalPageSize" :page-sizes="[20, 50, 100]" :total="filteredFiles.length"
+          layout="prev, pager, next, sizes, jumper, ->, total" background class="toolbar-pagination"
+          @current-change="handlePageChange" @size-change="handleSizeChange" />
+      </div>
+    </div>
+
     <!-- 文件网格 -->
     <div v-loading="loading" class="files-grid">
       <div v-for="file in paginatedFiles" :key="file.path || file.name" class="file-card">
@@ -39,17 +62,15 @@
     <ImagePreviewDialog v-if="enableImagePreview" v-model="showImagePreview" :image-url="previewImageUrl"
       :image-name="previewImageName" :folder-type="folderType" :folder-path="folderPath" />
 
-    <!-- 分页器 -->
-    <div v-if="pagination && files.length > pageSize" class="pagination-container">
-      <el-pagination v-model:current-page="currentPage" :page-size="pageSize" :total="files.length"
-        layout="total, prev, pager, next, jumper" background @current-change="handlePageChange" />
-    </div>
+    <!-- 空状态 -->
+    <el-empty v-if="filteredFiles.length === 0 && !loading" :description="emptyDescription || t('common.emptyList')" />
   </div>
 </template>
 
 <script lang="ts">
 import { defineComponent, type PropType } from 'vue'
-import { Folder, Document } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
+import { Folder, Document, Search } from '@element-plus/icons-vue'
 import type { FileInfo, FolderType } from '@/types'
 import ImagePreviewDialog from './ImagePreviewDialog.vue'
 
@@ -58,6 +79,7 @@ export default defineComponent({
   components: {
     Folder,
     Document,
+    Search,
     ImagePreviewDialog
   },
   props: {
@@ -88,45 +110,81 @@ export default defineComponent({
     pageSize: {
       type: Number,
       default: 20
+    },
+    emptyDescription: {
+      type: String,
+      default: ''
     }
   },
   emits: ['file-click', 'page-change'],
+  setup() {
+    const { t } = useI18n()
+    return { t }
+  },
   data() {
     return {
       showImagePreview: false,
       previewImageUrl: '',
       previewImageName: '',
-      currentPage: 1
+      currentPage: 1,
+      internalPageSize: this.pageSize,
+      internalSearchQuery: ''
     }
   },
   computed: {
-    paginatedFiles(): FileInfo[] {
-      if (!this.pagination) {
+    filteredFiles(): FileInfo[] {
+      if (!this.internalSearchQuery.trim()) {
         return this.files
       }
-      const start = (this.currentPage - 1) * this.pageSize
-      const end = start + this.pageSize
-      return this.files.slice(start, end)
+
+      const terms = this.internalSearchQuery.trim().split(/\s+/)
+      const includeTerms = terms.filter(t => !t.startsWith('-')).map(t => t.toLowerCase())
+      const excludeTerms = terms.filter(t => t.startsWith('-') && t.length > 1).map(t => t.slice(1).toLowerCase())
+
+      const getDisplayValues = (file: FileInfo): string => {
+        const values = []
+        if (file.name) values.push(file.name)
+        if (file.formattedDatetime) values.push(file.formattedDatetime)
+        if (file.formattedSize) values.push(file.formattedSize)
+        return values.join(' ')
+      }
+
+      return this.files.filter(file => {
+        const content = getDisplayValues(file).toLowerCase()
+
+        const hasAllIncludes = includeTerms.every(term => content.includes(term))
+        const hasNoExcludes = excludeTerms.every(term => !content.includes(term))
+
+        return hasAllIncludes && hasNoExcludes
+      })
+    },
+    paginatedFiles(): FileInfo[] {
+      if (!this.pagination) {
+        return this.filteredFiles
+      }
+      const start = (this.currentPage - 1) * this.internalPageSize
+      const end = start + this.internalPageSize
+      return this.filteredFiles.slice(start, end)
     }
   },
   watch: {
     files() {
-      // 当文件列表变化时，如果当前页码超出范围，重置为1
-      // 或者如果列表被清空/搜索结果变化，通常也希望重置
-      // 这里简单处理：如果当前页为空且不是第一页，则往前翻
-      // 但更常见的行为是搜索/筛选时重置为1。
-      // 既然我们不知道外部是因为搜索变了还是只是数据刷新，
-      // 比较安全的做法是：如果 files 变了，且 current page 现在的 start index 超过了 length，就重置。
-      // 为了简单且符合直觉（比如搜索），默认重置到第一页可能更好？
-      // 不，如果用户只是删除了当前页的一个文件，导致列表变短，不应该跳回第一页。
-      // 只有当 currentPage 超过最大页数时才调整。
-      const maxPage = Math.ceil(this.files.length / this.pageSize) || 1
-      if (this.currentPage > maxPage) {
-        this.currentPage = maxPage
-      }
+      this.handleFilesChange()
+    },
+    pageSize(newVal) {
+      this.internalPageSize = newVal
+    },
+    internalSearchQuery() {
+      this.currentPage = 1
     }
   },
   methods: {
+    handleFilesChange() {
+      const maxPage = Math.ceil(this.filteredFiles.length / this.internalPageSize) || 1
+      if (this.currentPage > maxPage) {
+        this.currentPage = maxPage
+      }
+    },
     handlePreviewClick(file: FileInfo) {
       if (file.fileType === 'dir') {
         // 文件夹点击,触发导航
@@ -143,6 +201,12 @@ export default defineComponent({
       this.$emit('page-change', page)
       // 滚动到顶部
       window.scrollTo({ top: 0, behavior: 'smooth' })
+    },
+    handleSizeChange(size: number) {
+      this.internalPageSize = size
+      this.currentPage = 1
+      // 滚动到顶部
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
 })
@@ -153,18 +217,41 @@ export default defineComponent({
     width: 100%;
   }
 
+  .list-toolbar {
+    margin-bottom: 16px;
+  }
+
+  .toolbar-items {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+
+    .header-slot {
+      display: flex;
+      align-items: center;
+    }
+
+    .search-input {
+      width: 300px;
+    }
+
+    .spacer {
+      flex: 1;
+    }
+
+    .toolbar-pagination {
+      :deep(.el-pagination__total) {
+        margin-right: 12px;
+      }
+    }
+  }
+
   .files-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 16px;
     margin-bottom: 24px;
-  }
-
-  .pagination-container {
-    display: flex;
-    justify-content: center;
-    margin-top: 24px;
-    padding-bottom: 24px;
   }
 
   .file-card {

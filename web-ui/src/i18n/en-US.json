@@ -12,6 +12,7 @@
     "loadMore": "Load more",
     "noMore": "No more content",
     "search": "Search",
+    "searchPlaceholder": "Search files...",
     "btn": {
       "load": "Load",
       "save": "Save",

@@ -20,30 +20,19 @@
       </el-button>
     </div>
 
-    <!-- 导航和搜索 -->
-    <div class="toolbar">
-      <el-breadcrumb separator="/" class="breadcrumb">
-        <el-breadcrumb-item>
-          <el-button link @click="navigateToPath(-1)">{{ t('common.rootDir') }}</el-button>
-        </el-breadcrumb-item>
-        <el-breadcrumb-item v-for="(pathPart, index) in currentPathParts" :key="index">
-          <el-button link @click="navigateToPath(index)">{{ pathPart }}</el-button>
-        </el-breadcrumb-item>
-      </el-breadcrumb>
-
-      <el-input v-model="searchQuery" :placeholder="t('collectionsTab.searchPlaceholder')" clearable
-        class="search-input">
-        <template #prefix>
-          <el-icon>
-            <Search />
-          </el-icon>
-        </template>
-      </el-input>
-    </div>
-
     <!-- 文件列表 -->
-    <FileCardList :files="filteredFiles" :loading="loading" :enable-image-preview="true" :folder-type="folderType"
-      :folder-path="currentFolderPath" @file-click="handleFileClick">
+    <FileCardList :files="allFiles" :loading="loading" :enable-image-preview="true" :folder-type="folderType"
+      :folder-path="currentFolderPath" :empty-description="t('collectionsTab.emptyText')" @file-click="handleFileClick">
+      <template #header>
+        <el-breadcrumb separator="/" class="breadcrumb">
+          <el-breadcrumb-item>
+            <el-button link @click="navigateToPath(-1)">{{ t('common.rootDir') }}</el-button>
+          </el-breadcrumb-item>
+          <el-breadcrumb-item v-for="(pathPart, index) in currentPathParts" :key="index">
+            <el-button link @click="navigateToPath(index)">{{ pathPart }}</el-button>
+          </el-breadcrumb-item>
+        </el-breadcrumb>
+      </template>
       <template #actions="{ file }">
         <div class="collections-file-wrapper">
           <div class="collections-file-header">
@@ -71,9 +60,6 @@
         </div>
       </template>
     </FileCardList>
-
-    <!-- 空状态 -->
-    <el-empty v-if="filteredFiles.length === 0 && !loading" :description="t('collectionsTab.emptyText')" />
   </div>
 </template>
 
@@ -81,7 +67,7 @@
 import { defineComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Delete, QuestionFilled } from '@element-plus/icons-vue'
+import { Delete, QuestionFilled } from '@element-plus/icons-vue'
 import { fetchFilesList, deleteFile, updateFile } from '@/api/files'
 import { getBrowserConfig, updateBrowserConfig, syncCollections } from '@/api/collections'
 import type { FileInfo, FolderType } from '@/types'
@@ -91,7 +77,6 @@ import FileCardList from '@/components/Common/FileCardList.vue'
 export default defineComponent({
   name: 'CollectionsTab',
   components: {
-    Search,
     Delete,
     QuestionFilled,
     FileCardList
@@ -107,7 +92,6 @@ export default defineComponent({
       allFiles: [] as FileInfo[],
       loading: false,
       syncing: false,
-      searchQuery: '',
       comfyApp: null as any,
       configGitRepo: '',
       originalGitRepo: ''
@@ -116,17 +100,6 @@ export default defineComponent({
   computed: {
     currentPathParts(): string[] {
       return this.currentFolderPath ? this.currentFolderPath.split('/') : []
-    },
-    filteredFiles(): FileInfo[] {
-      if (!this.searchQuery.trim()) {
-        return this.allFiles
-      }
-
-      const searchLower = this.searchQuery.toLowerCase()
-      return this.allFiles.filter(file =>
-        file.name.toLowerCase().includes(searchLower) ||
-        (file.notes && file.notes.toLowerCase().includes(searchLower))
-      )
     }
   },
   mounted() {
@@ -362,21 +335,6 @@ export default defineComponent({
       flex: 1;
       max-width: 500px;
     }
-  }
-
-  .toolbar {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 16px;
-    align-items: center;
-  }
-
-  .breadcrumb {
-    flex: 1;
-  }
-
-  .search-input {
-    width: 300px;
   }
 
   // Collections特有的样式

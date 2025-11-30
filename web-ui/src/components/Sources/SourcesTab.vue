@@ -53,9 +53,10 @@
         <el-empty :description="t('sourcesTab.selectSource')" />
       </div>
 
-      <div v-else class="files-container">
-        <!-- Toolbar -->
-        <div class="toolbar">
+      <!-- 文件列表 -->
+      <FileCardList v-else :files="allFiles" :loading="loadingFiles" :enable-image-preview="true"
+        :folder-type="'sources'" :folder-path="currentFolderPath" :empty-description="t('sourcesTab.emptyFiles')" @file-click="handleFileClick">
+        <template #header>
           <el-breadcrumb separator="/" class="breadcrumb">
             <el-breadcrumb-item>
               <el-button link @click="navigateToPath(-1)">{{ currentSource.name }}</el-button>
@@ -64,30 +65,14 @@
               <el-button link @click="navigateToPath(index)">{{ pathPart }}</el-button>
             </el-breadcrumb-item>
           </el-breadcrumb>
-
-          <el-input v-model="searchQuery" :placeholder="t('sourcesTab.searchPlaceholder')" clearable
-            class="search-input">
-            <template #prefix>
-              <el-icon>
-                <Search />
-              </el-icon>
-            </template>
-          </el-input>
-        </div>
-
-        <!-- 文件列表 -->
-        <FileCardList :files="filteredFiles" :loading="loadingFiles" :enable-image-preview="true"
-          :folder-type="'sources'" :folder-path="currentFolderPath" @file-click="handleFileClick">
-          <template #actions="{ file }">
-            <el-button v-if="file.fileType !== 'dir'" link type="primary" size="small"
-              @click="handleLoadWorkflow(file)">
-              {{ t('common.btn.load') }}
-            </el-button>
-          </template>
-        </FileCardList>
-
-        <el-empty v-if="filteredFiles.length === 0 && !loadingFiles" :description="t('sourcesTab.emptyFiles')" />
-      </div>
+        </template>
+        <template #actions="{ file }">
+          <el-button v-if="file.fileType !== 'dir'" link type="primary" size="small"
+            @click="handleLoadWorkflow(file)">
+            {{ t('common.btn.load') }}
+          </el-button>
+        </template>
+      </FileCardList>
     </div>
 
     <!-- Add Source Dialog -->
@@ -142,7 +127,7 @@
 import { defineComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Document, Link, Refresh, Delete, Search } from '@element-plus/icons-vue'
+import { Plus, Document, Link, Refresh, Delete } from '@element-plus/icons-vue'
 import { fetchSources, fetchAllSources, addSource, deleteSource, syncSource } from '@/api/sources'
 import { fetchFilesList } from '@/api/files'
 import type { Source } from '@/api/sources'
@@ -158,7 +143,6 @@ export default defineComponent({
     Link,
     Refresh,
     Delete,
-    Search,
     FileCardList
   },
   setup() {
@@ -175,7 +159,6 @@ export default defineComponent({
       // Files logic
       allFiles: [] as FileInfo[],
       loadingFiles: false,
-      searchQuery: '',
 
       // UI states
       showAddModal: false,
@@ -193,15 +176,6 @@ export default defineComponent({
       // currentFolderPath includes source.name as the first part, we only show the rest
       const parts = this.currentFolderPath.split('/')
       return parts.slice(1)
-    },
-    filteredFiles(): FileInfo[] {
-      if (!this.searchQuery.trim()) {
-        return this.allFiles
-      }
-      const searchLower = this.searchQuery.toLowerCase()
-      return this.allFiles.filter(file =>
-        file.name.toLowerCase().includes(searchLower)
-      )
     }
   },
   mounted() {
@@ -493,20 +467,6 @@ export default defineComponent({
     display: flex;
     flex-direction: column;
     gap: 16px;
-  }
-
-  .toolbar {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-  }
-
-  .breadcrumb {
-    flex: 1;
-  }
-
-  .search-input {
-    width: 300px;
   }
 
   /* Dialog Styles */

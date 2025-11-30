@@ -1,28 +1,18 @@
 <template>
   <div class="files-tab">
-    <!-- Breadcrumb和搜索栏 -->
-    <div class="toolbar">
-      <el-breadcrumb separator="/" class="breadcrumb">
-        <el-breadcrumb-item>
-          <el-button link @click="navigateToPath(-1)">{{ t('common.rootDir') }}</el-button>
-        </el-breadcrumb-item>
-        <el-breadcrumb-item v-for="(pathPart, index) in currentPathParts" :key="index">
-          <el-button link @click="navigateToPath(index)">{{ pathPart }}</el-button>
-        </el-breadcrumb-item>
-      </el-breadcrumb>
-
-      <el-input v-model="searchQuery" :placeholder="t('filesTab.searchPlaceholder')" clearable class="search-input">
-        <template #prefix>
-          <el-icon>
-            <Search />
-          </el-icon>
-        </template>
-      </el-input>
-    </div>
-
     <!-- 文件列表 -->
-    <FileCardList :files="filteredFiles" :loading="loading" :enable-image-preview="true" :folder-type="folderType"
-      :folder-path="currentFolderPath" @file-click="handleFileClick">
+    <FileCardList :files="allFiles" :loading="loading" :enable-image-preview="true" :folder-type="folderType"
+      :folder-path="currentFolderPath" :empty-description="t('filesTab.emptyText')" @file-click="handleFileClick">
+      <template #header>
+        <el-breadcrumb separator="/" class="breadcrumb">
+          <el-breadcrumb-item>
+            <el-button link @click="navigateToPath(-1)">{{ t('common.rootDir') }}</el-button>
+          </el-breadcrumb-item>
+          <el-breadcrumb-item v-for="(pathPart, index) in currentPathParts" :key="index">
+            <el-button link @click="navigateToPath(index)">{{ pathPart }}</el-button>
+          </el-breadcrumb-item>
+        </el-breadcrumb>
+      </template>
       <template #actions="{ file }">
         <el-button v-if="file.fileType !== 'dir'" link type="primary" size="small" @click="handleLoadWorkflow(file)">
           {{ t('common.btn.load') }}
@@ -38,9 +28,6 @@
       </template>
     </FileCardList>
 
-    <!-- 空状态 -->
-    <el-empty v-if="filteredFiles.length === 0 && !loading" :description="t('filesTab.emptyText')" />
-
     <!-- 返回顶部按钮 -->
     <el-backtop :right="40" :bottom="40" />
   </div>
@@ -50,7 +37,7 @@
 import { defineComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Delete } from '@element-plus/icons-vue'
+import { Delete } from '@element-plus/icons-vue'
 import { fetchFilesList, deleteFile } from '@/api/files'
 import type { FileInfo, FolderType } from '@/types'
 import { processFileInfo, processDirectoryInfo } from '@/utils'
@@ -60,7 +47,6 @@ import FileCardList from '@/components/Common/FileCardList.vue'
 export default defineComponent({
   name: 'FilesTab',
   components: {
-    Search,
     Delete,
     FileCardList
   },
@@ -74,23 +60,12 @@ export default defineComponent({
       currentFolderPath: '',
       allFiles: [] as FileInfo[],
       loading: false,
-      searchQuery: '',
       comfyApp: null as any
     }
   },
   computed: {
     currentPathParts(): string[] {
       return this.currentFolderPath ? this.currentFolderPath.split('/') : []
-    },
-    filteredFiles(): FileInfo[] {
-      if (!this.searchQuery.trim()) {
-        return this.allFiles
-      }
-
-      const searchLower = this.searchQuery.toLowerCase()
-      return this.allFiles.filter(file =>
-        file.name.toLowerCase().includes(searchLower)
-      )
     }
   },
   mounted() {
@@ -227,20 +202,5 @@ export default defineComponent({
 <style scoped lang="scss">
   .files-tab {
     padding: 16px;
-  }
-
-  .toolbar {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 16px;
-    align-items: center;
-  }
-
-  .breadcrumb {
-    flex: 1;
-  }
-
-  .search-input {
-    width: 300px;
   }
 </style>

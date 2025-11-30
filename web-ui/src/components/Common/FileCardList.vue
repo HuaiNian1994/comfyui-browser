@@ -6,13 +6,10 @@
         <div class="header-slot">
           <slot name="header"></slot>
         </div>
-        
+
         <!-- 管理模式按钮 -->
-        <el-button 
-          v-if="hasBatchActions"
-          :type="isManagementMode ? 'primary' : 'default'" 
-          @click="toggleManagementMode"
-        >
+        <el-button v-if="hasBatchActions" :type="isManagementMode ? 'primary' : 'default'"
+          @click="toggleManagementMode">
           {{ isManagementMode ? t('common.exitManage') : t('common.manage') }}
         </el-button>
 
@@ -22,28 +19,33 @@
             <el-button @click="handleSelectAll">{{ t('common.selectAll') }}</el-button>
             <el-button @click="handleInvertSelect">{{ t('common.invertSelect') }}</el-button>
           </el-button-group>
-          
+
           <span class="selection-count" v-if="selectedCount > 0">
             {{ t('common.selected', { count: selectedCount }) }}
           </span>
 
           <div class="batch-actions" v-if="selectedCount > 0">
-             <slot name="batch-actions" :selected-files="selectedFilesArray" :clear-selection="clearSelection">
-               <!-- 默认无批量操作按钮 -->
-             </slot>
+            <slot name="batch-actions" :selected-files="selectedFilesArray" :clear-selection="clearSelection">
+              <!-- 默认无批量操作按钮 -->
+            </slot>
           </div>
         </template>
 
         <!-- 搜索框 (仅在非管理模式或空间足够时显示) -->
-        <el-input v-if="!isManagementMode" v-model="internalSearchQuery" :placeholder="t('common.searchPlaceholder')" clearable
-          class="search-input">
+        <el-input v-if="!isManagementMode" v-model="internalSearchQuery" :placeholder="t('common.searchPlaceholder')"
+          clearable class="search-input">
           <template #prefix>
             <el-icon>
               <Search />
             </el-icon>
           </template>
         </el-input>
-        
+
+        <!-- 缩放滑块 -->
+        <div class="scale-slider">
+          <el-slider v-model="cardScale" :min="0.5" :max="3" :step="0.1" :show-tooltip="false" />
+        </div>
+
         <div class="spacer"></div>
         <!-- 分页器 -->
         <el-pagination v-if="pagination && filteredFiles.length > 0" v-model:current-page="currentPage"
@@ -54,14 +56,10 @@
     </div>
 
     <!-- 文件网格 -->
-    <div v-loading="loading || isBatchProcessing" class="files-grid">
-      <div 
-        v-for="file in paginatedFiles" 
-        :key="file.path || file.name" 
-        class="file-card"
-        :class="{ 'is-selected': isSelected(file), 'is-management': isManagementMode }"
-        @click="handleCardClick(file)"
-      >
+    <div v-loading="loading || isBatchProcessing" class="files-grid"
+      :style="{ '--card-min-width': (200 * cardScale) + 'px', '--preview-height': (150 * cardScale) + 'px' }">
+      <div v-for="file in paginatedFiles" :key="file.path || file.name" class="file-card"
+        :class="{ 'is-selected': isSelected(file), 'is-management': isManagementMode }" @click="handleCardClick(file)">
         <!-- 选择遮罩 -->
         <div v-if="isManagementMode" class="selection-overlay">
           <el-checkbox :model-value="isSelected(file)" @click.stop="toggleSelection(file)" />
@@ -116,7 +114,7 @@
 <script lang="ts">
 import { defineComponent, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Folder, Document, Search } from '@element-plus/icons-vue'
+import { Folder, Document, Search, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import type { FileInfo, FolderType } from '@/types'
 import ImagePreviewDialog from './ImagePreviewDialog.vue'
 
@@ -126,6 +124,8 @@ export default defineComponent({
     Folder,
     Document,
     Search,
+    ZoomIn,
+    ZoomOut,
     ImagePreviewDialog
   },
   props: {
@@ -179,7 +179,8 @@ export default defineComponent({
       // 管理模式相关
       isManagementMode: false,
       selectedFiles: new Set<string>(), // 存储选中文件的 name
-      isBatchProcessing: false
+      isBatchProcessing: false,
+      cardScale: 1
     }
   },
   computed: {
@@ -392,9 +393,26 @@ export default defineComponent({
 
   .files-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--card-min-width, 200px), 1fr));
     gap: 16px;
     margin-bottom: 24px;
+  }
+
+  .scale-slider {
+    display: flex;
+    align-items: center;
+    width: 150px;
+    margin-left: 16px;
+    gap: 8px;
+
+    .scale-icon {
+      color: var(--el-text-color-secondary);
+      font-size: 16px;
+    }
+
+    .el-slider {
+      flex: 1;
+    }
   }
 
   .file-card {
@@ -430,13 +448,13 @@ export default defineComponent({
 
     :deep(.el-checkbox) {
       pointer-events: auto;
-      
+
       .el-checkbox__inner {
         width: 20px;
         height: 20px;
         border-radius: 4px;
         border-width: 2px;
-        
+
         &::after {
           height: 10px;
           left: 6px;
@@ -448,7 +466,7 @@ export default defineComponent({
 
   .file-preview {
     width: 100%;
-    height: 150px;
+    height: var(--preview-height, 150px);
     display: flex;
     align-items: center;
     justify-content: center;

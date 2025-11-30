@@ -4,8 +4,9 @@ from os import path
 import os
 import shutil
 
-from ..utils import get_target_folder_files, get_parent_path, get_info_filename, \
-    image_extensions, video_extensions
+from ..utils import get_target_folder_files, get_parent_path, get_info_filename
+from ..constants import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
+
 
 # folder_path, folder_type
 async def api_get_files(request):
@@ -107,10 +108,11 @@ async def api_view_file(request):
 
     content_type = 'application/json'
     file_extension = path.splitext(filename)[1].lower()
-    if file_extension in image_extensions:
+    if file_extension in IMAGE_EXTENSIONS:
         content_type = f'image/{file_extension[1:]}'
-    if file_extension in video_extensions:
+    if file_extension in VIDEO_EXTENSIONS:
         content_type = f'video/{file_extension[1:]}'
+
 
     return web.Response(
         body=media_file,

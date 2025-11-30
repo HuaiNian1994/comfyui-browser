@@ -10,7 +10,10 @@ from tqdm import tqdm
 
 import folder_paths
 
-from ..utils import download_logs_path, log, http_client
+from ..config import get_download_logs_path
+from ..utils.git_utils import log
+from ..utils.http_utils import create_http_client
+
 
 def parse_options_header(content_disposition):
     param, options = '', {}
@@ -33,7 +36,8 @@ def parse_options_header(content_disposition):
 
 # credit: https://gist.github.com/phineas-pta/d73f9a035b05f8e923af8c01df057175
 async def download_by_requests(uuid:str, download_url:str, save_in:str, filename:str="", overwrite:bool=False, chunk_size:int=1):
-    log_file_path = path.join(download_logs_path(), uuid + '.json')
+    """使用requests下载文件"""
+    log_file_path = path.join(get_download_logs_path(), uuid + '.json')
     base_info = {
         'uuid': uuid,
         'download_url': download_url,
@@ -52,7 +56,7 @@ async def download_by_requests(uuid:str, download_url:str, save_in:str, filename
 
     HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"}
 
-    with http_client().get(download_url, headers=HEADERS, stream=True) as resp:
+    with create_http_client().get(download_url, headers=HEADERS, stream=True) as resp:
         MISSING_FILENAME = f"unkwown_{uuid}"
         # get file name
         if filename == "":
@@ -127,8 +131,9 @@ async def api_create_new_download(request):
     return web.json_response(status=201)
 
 async def api_list_downloads(_):
+    """列出所有下载任务"""
     download_logs = []
-    folder_listing = os.scandir(download_logs_path())
+    folder_listing = os.scandir(get_download_logs_path())
     folder_listing = sorted(folder_listing, key=lambda f: (f.is_file(), -f.stat().st_ctime))
     for item in folder_listing:
         if not path.exists(item.path):
@@ -155,13 +160,13 @@ async def api_list_downloads(_):
         'download_logs': download_logs,
     })
 
-# uuid
 async def api_show_download(request):
+    """显示单个下载任务"""
     uuid = request.match_info.get('uuid', '')
     if uuid == '':
         return web.Response(status=400)
 
-    target_path = path.join(download_logs_path(), uuid + '.json')
+    target_path = path.join(get_download_logs_path(), uuid + '.json')
     if not path.exists(target_path):
         return web.Response(status=404)
 

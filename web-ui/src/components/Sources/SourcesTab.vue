@@ -55,7 +55,7 @@
 
       <!-- 文件列表 -->
       <FileCardList v-else :files="allFiles" :loading="loadingFiles" :enable-image-preview="true"
-        :folder-type="'sources'" :folder-path="currentFolderPath" :empty-description="t('sourcesTab.emptyFiles')" @file-click="handleFileClick">
+        :folder-type="'sources'" :folder-path="currentFolderPath" :empty-description="t('sourcesTab.emptyFiles')" @file-click="handleFileClick" @refresh="loadFiles">
         <template #header>
           <el-breadcrumb separator="/" class="breadcrumb">
             <el-breadcrumb-item>
@@ -65,6 +65,11 @@
               <el-button link @click="navigateToPath(index)">{{ pathPart }}</el-button>
             </el-breadcrumb-item>
           </el-breadcrumb>
+        </template>
+        <template #batch-actions="{ selectedFiles, clearSelection }">
+          <el-button type="primary" @click="handleBatchCollect(selectedFiles, clearSelection)">
+            {{ t('common.batchCollect') }}
+          </el-button>
         </template>
         <template #actions="{ file }">
           <el-button v-if="file.fileType !== 'dir'" link type="primary" size="small"
@@ -133,6 +138,7 @@ import { fetchFilesList } from '@/api/files'
 import type { Source } from '@/api/sources'
 import type { FileInfo, FolderType } from '@/types'
 import { processFileInfo, processDirectoryInfo } from '@/utils'
+import { batchCollectFiles } from '@/utils/batch-actions'
 import FileCardList from '@/components/Common/FileCardList.vue'
 
 export default defineComponent({
@@ -363,6 +369,12 @@ export default defineComponent({
       } catch (error) {
         console.error('Load workflow failed:', error)
         ElMessage.error(this.t('sourcesTab.loadWorkflowFailed'))
+      }
+    },
+    async handleBatchCollect(files: FileInfo[], clearSelection: () => void) {
+      const result = await batchCollectFiles(files, 'sources', this.currentFolderPath, this.t)
+      if (result.successCount > 0) {
+        clearSelection()
       }
     },
     setupComfyApp() {

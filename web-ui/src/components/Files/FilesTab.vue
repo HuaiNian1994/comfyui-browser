@@ -2,7 +2,7 @@
   <div class="files-tab">
     <!-- 文件列表 -->
     <FileCardList :files="allFiles" :loading="loading" :enable-image-preview="true" :folder-type="folderType"
-      :folder-path="currentFolderPath" :empty-description="t('filesTab.emptyText')" @file-click="handleFileClick">
+      :folder-path="currentFolderPath" :empty-description="t('filesTab.emptyText')" @file-click="handleFileClick" @refresh="loadFiles">
       <template #header>
         <el-breadcrumb separator="/" class="breadcrumb">
           <el-breadcrumb-item>
@@ -13,6 +13,16 @@
           </el-breadcrumb-item>
         </el-breadcrumb>
       </template>
+      
+      <template #batch-actions="{ selectedFiles, clearSelection }">
+        <el-button type="primary" @click="handleBatchCollect(selectedFiles, clearSelection)">
+          {{ t('common.batchCollect') }}
+        </el-button>
+        <el-button type="danger" @click="handleBatchDelete(selectedFiles, clearSelection)">
+          {{ t('common.batchDelete') }}
+        </el-button>
+      </template>
+
       <template #actions="{ file }">
         <el-button v-if="file.fileType !== 'dir'" link type="primary" size="small" @click="handleLoadWorkflow(file)">
           {{ t('common.btn.load') }}
@@ -41,6 +51,7 @@ import { Delete } from '@element-plus/icons-vue'
 import { fetchFilesList, deleteFile } from '@/api/files'
 import type { FileInfo, FolderType } from '@/types'
 import { processFileInfo, processDirectoryInfo } from '@/utils'
+import { batchDeleteFiles, batchCollectFiles } from '@/utils/batch-actions'
 import apiClient from '@/api/client'
 import FileCardList from '@/components/Common/FileCardList.vue'
 
@@ -184,6 +195,23 @@ export default defineComponent({
           console.error('删除文件失败:', error)
           ElMessage.error(this.t('filesTab.deleteFailed'))
         }
+      }
+    },
+    async handleBatchDelete(files: FileInfo[], clearSelection: () => void) {
+      try {
+        const result = await batchDeleteFiles(files, this.folderType, this.currentFolderPath, this.t)
+        if (result.successCount > 0) {
+          this.loadFiles()
+          clearSelection()
+        }
+      } catch (e) {
+        // cancelled
+      }
+    },
+    async handleBatchCollect(files: FileInfo[], clearSelection: () => void) {
+      const result = await batchCollectFiles(files, this.folderType, this.currentFolderPath, this.t)
+      if (result.successCount > 0) {
+        clearSelection()
       }
     },
     setupComfyApp() {

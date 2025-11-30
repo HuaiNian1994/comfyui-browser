@@ -11,8 +11,20 @@
     "rootDir": "Root",
     "loadMore": "Load more",
     "noMore": "No more content",
+    "manage": "Manage",
+    "exitManage": "Exit Manage",
+    "selectAll": "Select All",
+    "invertSelect": "Invert",
+    "selected": "{count} selected",
+    "batchDelete": "Batch Delete",
+    "batchCollect": "Batch Collect",
     "search": "Search",
     "searchPlaceholder": "Search files...",
+    "deleteConfirm": "Are you sure you want to delete {count} selected files?",
+    "deleteSuccessCount": "Successfully deleted {count} files",
+    "deleteFailCount": "Failed to delete {count} files",
+    "collectSuccessCount": "Successfully collected {count} files",
+    "collectFailCount": "Failed to collect {count} files",
     "btn": {
       "load": "Load",
       "save": "Save",
@@ -107,6 +119,7 @@
     "loadFailed": "Failed to refresh download history"
   },
   "imagePreview": {
+    "metadata": "Metadata",
     "positivePrompt": "Positive Prompt",
     "negativePrompt": "Negative Prompt",
     "copyPrompt": "Copy",

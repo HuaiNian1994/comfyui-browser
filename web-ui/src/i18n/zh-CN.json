@@ -11,8 +11,20 @@
     "rootDir": "根目录",
     "loadMore": "加载更多",
     "noMore": "没有更多内容",
+    "manage": "管理",
+    "exitManage": "退出管理",
+    "selectAll": "全选",
+    "invertSelect": "反选",
+    "selected": "已选 {count} 项",
+    "batchDelete": "批量删除",
+    "batchCollect": "批量收藏",
     "search": "搜索",
     "searchPlaceholder": "搜索文件...",
+    "deleteConfirm": "确定要删除选中的 {count} 个文件吗？",
+    "deleteSuccessCount": "成功删除 {count} 个文件",
+    "deleteFailCount": "删除 {count} 个文件失败",
+    "collectSuccessCount": "成功收藏 {count} 个文件",
+    "collectFailCount": "收藏 {count} 个文件失败",
     "btn": {
       "load": "加载",
       "save": "收藏",
@@ -107,6 +119,7 @@
     "loadFailed": "刷新下载历史失败"
   },
   "imagePreview": {
+    "metadata": "元数据",
     "positivePrompt": "正向提示词",
     "negativePrompt": "反向提示词",
     "copyPrompt": "复制",

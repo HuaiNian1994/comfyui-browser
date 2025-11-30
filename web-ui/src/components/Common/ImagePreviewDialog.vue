@@ -1,79 +1,91 @@
 <template>
-  <el-dialog v-model="visible" :fullscreen="true" :show-close="true" class="image-preview-dialog" @close="handleClose">
-    <div :class="['preview-container', layoutClass]">
-      <div class="image-section">
-        <img :src="imageUrl" @load="onImageLoad" class="preview-image" alt="Preview" />
-      </div>
-      <div class="prompts-section">
-        <div v-if="loading" class="loading-container">
-          <el-icon class="is-loading">
-            <Loading />
-          </el-icon>
-          <span>{{ t('sourcesTab.imagePreview.loadingMetadata') }}</span>
+  <div v-if="modelValue" class="image-preview-wrapper">
+    <el-image-viewer
+      :url-list="previewUrls"
+      :initial-index="initialIndex"
+      @close="handleClose"
+      @switch="handleSwitch"
+    />
+    
+    <!-- Metadata Sidebar -->
+    <div class="preview-sidebar" @click.stop>
+      <div class="sidebar-content" v-loading="loading">
+        <div class="sidebar-header">
+          <h3>{{ t('imagePreview.metadata') || 'Metadata' }}</h3>
+          <el-button link @click="handleClose">
+            <el-icon :size="20"><Close /></el-icon>
+          </el-button>
         </div>
-        <div v-else-if="!metadata.has_metadata" class="no-metadata">
-          <el-icon>
-            <WarningFilled />
-          </el-icon>
-          <span>{{ t('sourcesTab.imagePreview.noMetadata') }}</span>
+
+        <div v-if="currentFile" class="file-basic-info">
+          <p class="file-name" :title="currentFile.name">{{ currentFile.name }}</p>
+          <p class="file-meta">{{ currentFile.formattedDatetime }}</p>
+          <p v-if="currentFile.formattedSize" class="file-meta">{{ currentFile.formattedSize }}</p>
+          <div class="file-actions">
+            <slot name="actions" :file="currentFile"></slot>
+          </div>
         </div>
+
+        <div v-if="!metadata.has_metadata && !loading" class="no-metadata">
+          <el-icon><WarningFilled /></el-icon>
+          <span>{{ t('imagePreview.noMetadata') }}</span>
+        </div>
+
         <div v-else class="prompts-content">
-          <!-- 正向提示词 -->
+          <!-- Positive Prompt -->
           <div class="prompt-block">
-            <h3>{{ t('sourcesTab.imagePreview.positivePrompt') }}</h3>
-            <div class="prompt-text">{{ metadata.positive || t('sourcesTab.imagePreview.noPrompt') }}</div>
-            <el-button v-if="metadata.positive" size="small" @click="copyPrompt(metadata.positive)">
-              <el-icon>
-                <CopyDocument />
-              </el-icon>
-              {{ t('sourcesTab.imagePreview.copyPrompt') }}
+            <h4>{{ t('imagePreview.positivePrompt') }}</h4>
+            <div class="prompt-text">{{ metadata.positive || t('imagePreview.noPrompt') }}</div>
+            <el-button v-if="metadata.positive" size="small" @click="copyPrompt(metadata.positive)" text bg>
+              <el-icon><CopyDocument /></el-icon>
+              {{ t('imagePreview.copyPrompt') }}
             </el-button>
           </div>
 
-          <!-- 反向提示词 -->
+          <!-- Negative Prompt -->
           <div class="prompt-block">
-            <h3>{{ t('sourcesTab.imagePreview.negativePrompt') }}</h3>
-            <div class="prompt-text">{{ metadata.negative || t('sourcesTab.imagePreview.noPrompt') }}</div>
-            <el-button v-if="metadata.negative" size="small" @click="copyPrompt(metadata.negative)">
-              <el-icon>
-                <CopyDocument />
-              </el-icon>
-              {{ t('sourcesTab.imagePreview.copyPrompt') }}
+            <h4>{{ t('imagePreview.negativePrompt') }}</h4>
+            <div class="prompt-text">{{ metadata.negative || t('imagePreview.noPrompt') }}</div>
+            <el-button v-if="metadata.negative" size="small" @click="copyPrompt(metadata.negative)" text bg>
+              <el-icon><CopyDocument /></el-icon>
+              {{ t('imagePreview.copyPrompt') }}
             </el-button>
           </div>
         </div>
       </div>
     </div>
-  </el-dialog>
+  </div>
 </template>
 
 <script lang="ts">
 import { defineComponent, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
-import { Loading, WarningFilled, CopyDocument } from '@element-plus/icons-vue'
+import { ElImageViewer, ElMessage } from 'element-plus'
+import { Loading, WarningFilled, CopyDocument, Close } from '@element-plus/icons-vue'
 import { fetchImageMetadata } from '@/api/files'
-import type { FolderType, ImageMetadata } from '@/types'
+import type { FolderType, ImageMetadata, FileInfo } from '@/types'
 
 export default defineComponent({
   name: 'ImagePreviewDialog',
   components: {
+    ElImageViewer,
     Loading,
     WarningFilled,
-    CopyDocument
+    CopyDocument,
+    Close
   },
   props: {
     modelValue: {
       type: Boolean,
       required: true
     },
-    imageUrl: {
-      type: String,
-      default: ''
+    previewFileList: {
+      type: Array as PropType<FileInfo[]>,
+      default: () => []
     },
-    imageName: {
-      type: String,
-      default: ''
+    initialIndex: {
+      type: Number,
+      default: 0
     },
     folderType: {
       type: String as PropType<FolderType>,
@@ -91,7 +103,7 @@ export default defineComponent({
   },
   data() {
     return {
-      layoutClass: 'layout-vertical',
+      currentIndex: this.initialIndex,
       loading: false,
       metadata: {
         positive: '',
@@ -101,39 +113,49 @@ export default defineComponent({
     }
   },
   computed: {
-    visible: {
-      get(): boolean {
-        return this.modelValue
-      },
-      set(value: boolean) {
-        this.$emit('update:modelValue', value)
-      }
+    previewUrls(): string[] {
+      return this.previewFileList.map(file => file.previewUrl || '')
+    },
+    currentFile(): FileInfo | undefined {
+      return this.previewFileList[this.currentIndex]
     }
   },
   watch: {
-    modelValue(newVal: boolean) {
-      if (newVal && this.imageName) {
+    modelValue(val) {
+      if (val) {
+        this.currentIndex = this.initialIndex
         this.loadMetadata()
+      }
+    },
+    // Watch initialIndex in case it changes while open (unlikely but safe)
+    initialIndex(val) {
+      if (this.modelValue) {
+        this.currentIndex = val
       }
     }
   },
+  mounted() {
+    if (this.modelValue) {
+      this.loadMetadata()
+    }
+  },
   methods: {
-    onImageLoad(event: Event) {
-      const img = event.target as HTMLImageElement
-      const aspectRatio = img.naturalHeight / img.naturalWidth
-
-      // 高比宽长(竖图):左右布局,其他:上下布局
-      this.layoutClass = aspectRatio > 1 ? 'layout-horizontal' : 'layout-vertical'
+    handleClose() {
+      this.$emit('update:modelValue', false)
     },
-
+    handleSwitch(index: number) {
+      this.currentIndex = index
+      this.loadMetadata()
+    },
     async loadMetadata() {
-      if (!this.imageName) return
+      const file = this.currentFile
+      if (!file) return
 
       this.loading = true
       try {
         this.metadata = await fetchImageMetadata(
           this.folderType,
-          this.imageName,
+          file.name,
           this.folderPath
         )
       } catch (error) {
@@ -147,134 +169,143 @@ export default defineComponent({
         this.loading = false
       }
     },
-
     async copyPrompt(text: string) {
       try {
         await navigator.clipboard.writeText(text)
-        ElMessage.success(this.t('sourcesTab.imagePreview.copySuccess'))
+        ElMessage.success(this.t('imagePreview.copySuccess'))
       } catch (error) {
         console.error('Failed to copy:', error)
-        ElMessage.error(this.t('sourcesTab.imagePreview.copyFailed'))
+        ElMessage.error(this.t('imagePreview.copyFailed'))
       }
-    },
-
-    handleClose() {
-      this.visible = false
-      // 重置状态
-      this.metadata = {
-        positive: '',
-        negative: '',
-        has_metadata: false
-      }
-      this.layoutClass = 'layout-vertical'
     }
   }
 })
 </script>
 
 <style scoped lang="scss">
-  .image-preview-dialog {
-    :deep(.el-dialog__body) {
-      padding: 0;
+.image-preview-wrapper {
+  position: relative;
+  z-index: 2000;
+
+  .preview-sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 320px;
+    background: var(--el-bg-color);
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
+    z-index: 3000; /* Higher than el-image-viewer (usually around 2000) */
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease;
+
+    .sidebar-content {
       height: 100%;
-    }
-  }
-
-  .preview-container {
-    display: flex;
-    height: 100vh;
-    background-color: var(--el-bg-color-page);
-
-    &.layout-horizontal {
-      flex-direction: row;
-
-      .image-section {
-        flex: 1;
-        max-width: 60%;
-      }
-
-      .prompts-section {
-        flex: 1;
-        max-width: 40%;
-      }
-    }
-
-    &.layout-vertical {
+      display: flex;
       flex-direction: column;
+      overflow: hidden;
 
-      .image-section {
-        flex: 1;
-        max-height: 60%;
+      .sidebar-header {
+        padding: 16px;
+        border-bottom: 1px solid var(--el-border-color);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+
+        h3 {
+          margin: 0;
+          font-size: 16px;
+          font-weight: 600;
+        }
       }
 
-      .prompts-section {
+      .file-basic-info {
+        padding: 16px;
+        border-bottom: 1px solid var(--el-border-color);
+        flex-shrink: 0;
+
+        .file-name {
+          font-weight: 600;
+          font-size: 14px;
+          margin: 0 0 8px 0;
+          word-break: break-word;
+        }
+
+        .file-meta {
+          font-size: 12px;
+          color: var(--el-text-color-secondary);
+          margin: 4px 0;
+        }
+
+        .file-actions {
+          margin-top: 12px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+      }
+
+      .prompts-content {
         flex: 1;
-        max-height: 40%;
+        overflow-y: auto;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+
+        &::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        &::-webkit-scrollbar-thumb {
+          background-color: var(--el-border-color);
+          border-radius: 3px;
+        }
+
+        &::-webkit-scrollbar-track {
+          background-color: transparent;
+        }
+
+        .prompt-block {
+          h4 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--el-text-color-primary);
+          }
+
+          .prompt-text {
+            padding: 12px;
+            background-color: var(--el-fill-color-light);
+            border-radius: 4px;
+            margin-bottom: 8px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 400px;
+            overflow-y: auto;
+            color: var(--el-text-color-regular);
+          }
+        }
+      }
+
+      .no-metadata {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        color: var(--el-text-color-secondary);
+
+        .el-icon {
+          font-size: 48px;
+        }
       }
     }
   }
-
-  .image-section {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: #000;
-    padding: 20px;
-
-    .preview-image {
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
-    }
-  }
-
-  .prompts-section {
-    display: flex;
-    flex-direction: column;
-    padding: 24px;
-    overflow-y: auto;
-    background-color: var(--el-bg-color);
-  }
-
-  .loading-container,
-  .no-metadata {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    height: 100%;
-    color: var(--el-text-color-secondary);
-
-    .el-icon {
-      font-size: 48px;
-    }
-  }
-
-  .prompts-content {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
-
-  .prompt-block {
-    h3 {
-      margin: 0 0 12px 0;
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--el-text-color-primary);
-    }
-
-    .prompt-text {
-      padding: 12px;
-      background-color: var(--el-fill-color-light);
-      border-radius: 4px;
-      margin-bottom: 12px;
-      white-space: pre-wrap;
-      word-break: break-word;
-      line-height: 1.6;
-      max-height: 300px;
-      overflow-y: auto;
-    }
-  }
+}
 </style>

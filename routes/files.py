@@ -4,7 +4,7 @@ from os import path
 import os
 import shutil
 
-from ..utils import get_target_folder_files, get_parent_path, get_info_filename
+from ..utils import get_target_folder_files, get_parent_path, get_info_filename, extract_comfyui_png_metadata
 from ..constants import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 
 
@@ -89,6 +89,7 @@ async def api_update_file(request):
 
     return web.Response(status=201)
 
+
 # filename, folder_path, folder_type
 async def api_view_file(request):
     folder_type = request.query.get("folder_type", "outputs")
@@ -113,9 +114,38 @@ async def api_view_file(request):
     if file_extension in VIDEO_EXTENSIONS:
         content_type = f'video/{file_extension[1:]}'
 
-
     return web.Response(
         body=media_file,
         content_type=content_type,
         headers={"Content-Disposition": f"filename=\"{filename}\""}
     )
+
+
+# filename, folder_path, folder_type
+async def api_get_image_metadata(request):
+    """获取图片元数据(ComfyUI workflow和prompt)"""
+    folder_type = request.query.get("folder_type", "outputs")
+    folder_path = request.query.get("folder_path", "")
+    filename = request.query.get("filename", None)
+    
+    if not filename:
+        return web.Response(status=400, text="filename is required")
+
+    parent_path = get_parent_path(folder_type)
+    file_path = path.join(parent_path, folder_path, filename)
+
+    if not path.exists(file_path):
+        return web.Response(status=404)
+
+    # 检查是否为图片文件
+    file_extension = path.splitext(filename)[1].lower()
+    if file_extension not in IMAGE_EXTENSIONS:
+        return web.json_response({
+            "positive": "",
+            "negative": "",
+            "has_metadata": False
+        })
+
+    # 提取元数据
+    metadata = extract_comfyui_png_metadata(file_path)
+    return web.json_response(metadata)

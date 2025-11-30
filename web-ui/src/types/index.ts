@@ -71,3 +71,12 @@ export interface DownloadTask {
   progress: number
   created_at: number
 }
+
+/**
+ * 图片元数据接口
+ */
+export interface ImageMetadata {
+  positive: string
+  negative: string
+  has_metadata: boolean
+}

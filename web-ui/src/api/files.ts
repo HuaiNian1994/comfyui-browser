@@ -1,5 +1,5 @@
 import apiClient from './client'
-import type { FilesResponse, FolderType } from '@/types'
+import type { FilesResponse, FolderType, ImageMetadata } from '@/types'
 
 /**
  * 获取文件列表
@@ -74,5 +74,25 @@ export const viewFile = async (
   }
 
   const response = await apiClient.get('/files/view', { params })
+  return response.data
+}
+
+/**
+ * 获取图片元数据
+ */
+export const fetchImageMetadata = async (
+  folderType: FolderType,
+  filename: string,
+  folderPath?: string
+): Promise<ImageMetadata> => {
+  const params: Record<string, string> = {
+    folder_type: folderType,
+    filename: filename,
+  }
+  if (folderPath) {
+    params.folder_path = folderPath
+  }
+
+  const response = await apiClient.get<ImageMetadata>('/files/metadata', { params })
   return response.data
 }

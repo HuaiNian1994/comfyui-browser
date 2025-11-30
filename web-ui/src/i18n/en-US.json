@@ -104,5 +104,15 @@
     "downloading": "Downloading",
     "enterUrl": "Please enter a download URL",
     "loadFailed": "Failed to refresh download history"
+  },
+  "imagePreview": {
+    "positivePrompt": "Positive Prompt",
+    "negativePrompt": "Negative Prompt",
+    "copyPrompt": "Copy",
+    "noMetadata": "This image does not contain metadata",
+    "noPrompt": "None",
+    "loadingMetadata": "Loading metadata...",
+    "copySuccess": "Copied to clipboard",
+    "copyFailed": "Failed to copy"
   }
 }

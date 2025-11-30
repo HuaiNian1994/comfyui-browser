@@ -24,4 +24,8 @@ cd /d "!COMFYUI_RUNTIME_PATH!\custom_nodes\comfyui-browser\web-ui"
 :: Set environment variable for Vite to pick up
 set "COMFYUI_SERVER_URL=!COMFYUI_SERVER_URL!"
 
-call pnpm dev
+:: Start dev server in a new window
+start "ComfyUI Browser Dev Server" pnpm dev
+
+:: Start watch build in current window
+call pnpm dev:watch

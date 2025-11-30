@@ -20,48 +20,23 @@
       </el-input>
     </div>
 
-    <!-- 文件网格 -->
-    <div v-loading="loading" class="files-grid">
-      <div v-for="file in displayedFiles" :key="file.name" class="file-card">
-        <!-- 文件预览 -->
-        <div class="file-preview" @click="handleFileClick(file)">
-          <el-image v-if="file.fileType === 'image'" :src="file.previewUrl" fit="cover" class="preview-image" lazy />
-          <video v-else-if="file.fileType === 'video'" :src="file.previewUrl" class="preview-video" />
-          <div v-else-if="file.fileType === 'dir'" class="preview-folder">
-            <el-icon :size="48">
-              <Folder />
-            </el-icon>
-          </div>
-          <div v-else class="preview-file">
-            <el-icon :size="48">
-              <Document />
-            </el-icon>
-          </div>
-        </div>
-
-        <!-- 文件信息 -->
-        <div class="file-info">
-          <p class="file-name" :title="file.name">{{ file.name }}</p>
-          <p class="file-meta">{{ file.formattedDatetime }}</p>
-          <p class="file-meta">{{ file.formattedSize }}</p>
-        </div>
-
-        <!-- 操作按钮 -->
-        <div class="file-actions">
-          <el-button v-if="file.fileType !== 'dir'" link type="primary" size="small" @click="handleLoadWorkflow(file)">
-            {{ t('common.btn.load') }}
-          </el-button>
-          <el-button link type="primary" size="small" @click="handleCollectFile(file)">
-            {{ t('filesTab.addToSaves') }}
-          </el-button>
-          <el-button link type="danger" size="small" @click="handleDeleteFile(file)">
-            <el-icon>
-              <Delete />
-            </el-icon> {{ t('common.btn.delete') }}
-          </el-button>
-        </div>
-      </div>
-    </div>
+    <!-- 文件列表 -->
+    <FileCardList :files="displayedFiles" :loading="loading" :enable-image-preview="true" :folder-type="folderType"
+      :folder-path="currentFolderPath" @file-click="handleFileClick">
+      <template #actions="{ file }">
+        <el-button v-if="file.fileType !== 'dir'" link type="primary" size="small" @click="handleLoadWorkflow(file)">
+          {{ t('common.btn.load') }}
+        </el-button>
+        <el-button link type="primary" size="small" @click="handleCollectFile(file)">
+          {{ t('filesTab.addToSaves') }}
+        </el-button>
+        <el-button link type="danger" size="small" @click="handleDeleteFile(file)">
+          <el-icon>
+            <Delete />
+          </el-icon> {{ t('common.btn.delete') }}
+        </el-button>
+      </template>
+    </FileCardList>
 
     <!-- 加载更多 -->
     <div class="load-more">
@@ -85,19 +60,19 @@
 import { defineComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Folder, Document, Delete } from '@element-plus/icons-vue'
+import { Search, Delete } from '@element-plus/icons-vue'
 import { fetchFilesList, deleteFile } from '@/api/files'
 import type { FileInfo, FolderType } from '@/types'
 import { processFileInfo, processDirectoryInfo } from '@/utils'
 import apiClient from '@/api/client'
+import FileCardList from '@/components/Common/FileCardList.vue'
 
 export default defineComponent({
   name: 'FilesTab',
   components: {
     Search,
-    Folder,
-    Document,
-    Delete
+    Delete,
+    FileCardList
   },
   setup() {
     const { t } = useI18n()
@@ -296,78 +271,6 @@ export default defineComponent({
 
   .search-input {
     width: 300px;
-  }
-
-  .files-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-
-  .file-card {
-    background: var(--el-bg-color-page);
-    border: 1px solid var(--el-border-color);
-    border-radius: 8px;
-    overflow: hidden;
-    transition: all 0.3s;
-
-    &:hover {
-      box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-      transform: translateY(-2px);
-    }
-  }
-
-  .file-preview {
-    width: 100%;
-    height: 150px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--el-fill-color-light);
-    cursor: pointer;
-    overflow: hidden;
-  }
-
-  .preview-image,
-  .preview-video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .preview-folder,
-  .preview-file {
-    color: var(--el-text-color-secondary);
-  }
-
-  .file-info {
-    padding: 12px;
-  }
-
-  .file-name {
-    font-weight: 600;
-    font-size: 14px;
-    margin: 0 0 8px 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .file-meta {
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
-    margin: 4px 0;
-  }
-
-  .file-actions {
-    padding: 0 12px 12px;
-    display: flex;
-    gap: 8px;
-
-    .el-button {
-      padding: 0;
-    }
   }
 
   .load-more {

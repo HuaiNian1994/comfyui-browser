@@ -104,5 +104,15 @@
     "downloading": "下载中",
     "enterUrl": "请输入下载 URL",
     "loadFailed": "刷新下载历史失败"
+  },
+  "imagePreview": {
+    "positivePrompt": "正向提示词",
+    "negativePrompt": "反向提示词",
+    "copyPrompt": "复制",
+    "noMetadata": "该图片不包含元数据",
+    "noPrompt": "无",
+    "loadingMetadata": "加载元数据中...",
+    "copySuccess": "已复制到剪贴板",
+    "copyFailed": "复制失败"
   }
 }

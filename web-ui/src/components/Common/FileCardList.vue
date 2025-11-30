@@ -2,8 +2,8 @@
   <div class="file-card-list">
     <!-- 文件网格 -->
     <div v-loading="loading" class="files-grid">
-      <div v-for="file in files" :key="file.path || file.name" class="file-card">
-        <!-- 文件预览 -->123456
+      <div v-for="file in paginatedFiles" :key="file.path || file.name" class="file-card">
+        <!-- 文件预览 -->
         <div class="file-preview" @click="handlePreviewClick(file)">
           <el-image v-if="file.fileType === 'image'" :src="file.previewUrl" fit="cover" class="preview-image" lazy />
           <video v-else-if="file.fileType === 'video'" :src="file.previewUrl" class="preview-video" />
@@ -38,6 +38,12 @@
     <!-- 图片预览对话框 -->
     <ImagePreviewDialog v-if="enableImagePreview" v-model="showImagePreview" :image-url="previewImageUrl"
       :image-name="previewImageName" :folder-type="folderType" :folder-path="folderPath" />
+
+    <!-- 分页器 -->
+    <div v-if="pagination && files.length > pageSize" class="pagination-container">
+      <el-pagination v-model:current-page="currentPage" :page-size="pageSize" :total="files.length"
+        layout="total, prev, pager, next, jumper" background @current-change="handlePageChange" />
+    </div>
   </div>
 </template>
 
@@ -74,14 +80,50 @@ export default defineComponent({
     folderPath: {
       type: String,
       default: ''
+    },
+    pagination: {
+      type: Boolean,
+      default: true
+    },
+    pageSize: {
+      type: Number,
+      default: 20
     }
   },
-  emits: ['file-click'],
+  emits: ['file-click', 'page-change'],
   data() {
     return {
       showImagePreview: false,
       previewImageUrl: '',
-      previewImageName: ''
+      previewImageName: '',
+      currentPage: 1
+    }
+  },
+  computed: {
+    paginatedFiles(): FileInfo[] {
+      if (!this.pagination) {
+        return this.files
+      }
+      const start = (this.currentPage - 1) * this.pageSize
+      const end = start + this.pageSize
+      return this.files.slice(start, end)
+    }
+  },
+  watch: {
+    files() {
+      // 当文件列表变化时，如果当前页码超出范围，重置为1
+      // 或者如果列表被清空/搜索结果变化，通常也希望重置
+      // 这里简单处理：如果当前页为空且不是第一页，则往前翻
+      // 但更常见的行为是搜索/筛选时重置为1。
+      // 既然我们不知道外部是因为搜索变了还是只是数据刷新，
+      // 比较安全的做法是：如果 files 变了，且 current page 现在的 start index 超过了 length，就重置。
+      // 为了简单且符合直觉（比如搜索），默认重置到第一页可能更好？
+      // 不，如果用户只是删除了当前页的一个文件，导致列表变短，不应该跳回第一页。
+      // 只有当 currentPage 超过最大页数时才调整。
+      const maxPage = Math.ceil(this.files.length / this.pageSize) || 1
+      if (this.currentPage > maxPage) {
+        this.currentPage = maxPage
+      }
     }
   },
   methods: {
@@ -95,6 +137,12 @@ export default defineComponent({
         this.previewImageName = file.name
         this.showImagePreview = true
       }
+    },
+    handlePageChange(page: number) {
+      this.currentPage = page
+      this.$emit('page-change', page)
+      // 滚动到顶部
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
 })
@@ -110,6 +158,13 @@ export default defineComponent({
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 16px;
     margin-bottom: 24px;
+  }
+
+  .pagination-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 24px;
+    padding-bottom: 24px;
   }
 
   .file-card {

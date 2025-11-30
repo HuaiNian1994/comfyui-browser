@@ -76,7 +76,7 @@
         </div>
 
         <!-- 文件列表 -->
-        <FileCardList :files="displayedFiles" :loading="loadingFiles" :enable-image-preview="true"
+        <FileCardList :files="filteredFiles" :loading="loadingFiles" :enable-image-preview="true"
           :folder-type="'sources'" :folder-path="currentFolderPath" @file-click="handleFileClick">
           <template #actions="{ file }">
             <el-button v-if="file.fileType !== 'dir'" link type="primary" size="small"
@@ -85,16 +85,6 @@
             </el-button>
           </template>
         </FileCardList>
-
-        <!-- 加载更多 -->
-        <div class="load-more">
-          <el-button v-if="filteredFiles.length > displayCursor" @click="loadMoreFiles">
-            {{ t('common.loadMore') }}
-          </el-button>
-          <p v-else-if="filteredFiles.length > 0" class="no-more-text">
-            {{ t('common.noMore') }}
-          </p>
-        </div>
 
         <el-empty v-if="filteredFiles.length === 0 && !loadingFiles" :description="t('sourcesTab.emptyFiles')" />
       </div>
@@ -186,7 +176,6 @@ export default defineComponent({
       allFiles: [] as FileInfo[],
       loadingFiles: false,
       searchQuery: '',
-      displayCursor: 20,
 
       // UI states
       showAddModal: false,
@@ -213,16 +202,12 @@ export default defineComponent({
       return this.allFiles.filter(file =>
         file.name.toLowerCase().includes(searchLower)
       )
-    },
-    displayedFiles(): FileInfo[] {
-      return this.filteredFiles.slice(0, this.displayCursor)
     }
   },
   mounted() {
     this.loadSources()
     this.loadAllSources()
     this.setupComfyApp()
-    this.setupScrollListener()
   },
   methods: {
     getRepoPath(url: string) {
@@ -354,7 +339,6 @@ export default defineComponent({
         })
 
         this.allFiles = processedFiles
-        this.displayCursor = 20
       } catch (error) {
         console.error('Load files failed:', error)
         ElMessage.error(this.t('sourcesTab.loadFilesFailed'))
@@ -407,22 +391,8 @@ export default defineComponent({
         ElMessage.error(this.t('sourcesTab.loadWorkflowFailed'))
       }
     },
-    loadMoreFiles() {
-      this.displayCursor += 20
-    },
     setupComfyApp() {
       this.comfyApp = (window.top as any)?.app
-    },
-    setupScrollListener() {
-      const contentEl = this.$el.querySelector('.content')
-      if (contentEl) {
-        contentEl.addEventListener('scroll', () => {
-          const { scrollTop, scrollHeight, clientHeight } = contentEl
-          if (scrollTop + clientHeight >= scrollHeight - 50 && this.filteredFiles.length > this.displayCursor) {
-            this.loadMoreFiles()
-          }
-        })
-      }
     }
   }
 })
@@ -537,17 +507,6 @@ export default defineComponent({
 
   .search-input {
     width: 300px;
-  }
-
-  .load-more {
-    text-align: center;
-    padding: 24px 0;
-  }
-
-  .no-more-text {
-    color: var(--el-text-color-secondary);
-    font-size: 14px;
-    text-align: center;
   }
 
   /* Dialog Styles */

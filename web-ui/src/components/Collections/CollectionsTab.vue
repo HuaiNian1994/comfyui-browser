@@ -42,7 +42,7 @@
     </div>
 
     <!-- 文件列表 -->
-    <FileCardList :files="displayedFiles" :loading="loading" :enable-image-preview="true" :folder-type="folderType"
+    <FileCardList :files="filteredFiles" :loading="loading" :enable-image-preview="true" :folder-type="folderType"
       :folder-path="currentFolderPath" @file-click="handleFileClick">
       <template #actions="{ file }">
         <div class="collections-file-wrapper">
@@ -71,16 +71,6 @@
         </div>
       </template>
     </FileCardList>
-
-    <!-- 加载更多 -->
-    <div class="load-more">
-      <el-button v-if="filteredFiles.length > displayCursor" @click="loadMoreFiles">
-        {{ t('common.loadMore') }}
-      </el-button>
-      <p v-else-if="filteredFiles.length > 0" class="no-more-text">
-        {{ t('common.noMore') }}
-      </p>
-    </div>
 
     <!-- 空状态 -->
     <el-empty v-if="filteredFiles.length === 0 && !loading" :description="t('collectionsTab.emptyText')" />
@@ -118,7 +108,6 @@ export default defineComponent({
       loading: false,
       syncing: false,
       searchQuery: '',
-      displayCursor: 20,
       comfyApp: null as any,
       configGitRepo: '',
       originalGitRepo: ''
@@ -138,16 +127,12 @@ export default defineComponent({
         file.name.toLowerCase().includes(searchLower) ||
         (file.notes && file.notes.toLowerCase().includes(searchLower))
       )
-    },
-    displayedFiles(): FileInfo[] {
-      return this.filteredFiles.slice(0, this.displayCursor)
     }
   },
   mounted() {
     this.loadFiles()
     this.loadConfig()
     this.setupComfyApp()
-    this.setupScrollListener()
   },
   methods: {
     async loadFiles() {
@@ -173,7 +158,6 @@ export default defineComponent({
         })
 
         this.allFiles = processedFiles
-        this.displayCursor = 20
       } catch (error) {
         console.error('加载收藏列表失败:', error)
         ElMessage.error(this.t('collectionsTab.loadFailed'))
@@ -203,12 +187,17 @@ export default defineComponent({
       }
     },
     async handleSync() {
+      if (this.syncing) return
+
       this.syncing = true
       try {
-        await syncCollections()
-        ElMessage.success(this.t('collectionsTab.syncSuccess'))
-        this.currentFolderPath = ''
-        this.loadFiles()
+        const result = await syncCollections()
+        if (result.success) {
+          ElMessage.success(this.t('collectionsTab.syncSuccess'))
+          this.loadFiles()
+        } else {
+          ElMessage.warning(this.t('collectionsTab.syncPartial') + (result.message ? `: ${result.message}` : ''))
+        }
       } catch (error) {
         console.error('同步失败:', error)
         ElMessage.error(this.t('collectionsTab.syncFailed'))
@@ -334,9 +323,6 @@ export default defineComponent({
         }
       }
     },
-    loadMoreFiles() {
-      this.displayCursor += 20
-    },
     setupComfyApp() {
       this.comfyApp = (window.top as any)?.app
 
@@ -345,16 +331,6 @@ export default defineComponent({
           this.loadFiles()
         })
       }
-    },
-    setupScrollListener() {
-      window.addEventListener('scroll', () => {
-        const documentHeight = document.documentElement.scrollHeight
-        const scrollPosition = window.innerHeight + window.scrollY
-
-        if (scrollPosition >= documentHeight && this.filteredFiles.length > this.displayCursor) {
-          this.loadMoreFiles()
-        }
-      })
     }
   }
 })
@@ -401,16 +377,6 @@ export default defineComponent({
 
   .search-input {
     width: 300px;
-  }
-
-  .load-more {
-    text-align: center;
-    padding: 24px 0;
-  }
-
-  .no-more-text {
-    color: var(--el-text-color-secondary);
-    font-size: 14px;
   }
 
   // Collections特有的样式

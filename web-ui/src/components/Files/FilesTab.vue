@@ -21,7 +21,7 @@
     </div>
 
     <!-- 文件列表 -->
-    <FileCardList :files="displayedFiles" :loading="loading" :enable-image-preview="true" :folder-type="folderType"
+    <FileCardList :files="filteredFiles" :loading="loading" :enable-image-preview="true" :folder-type="folderType"
       :folder-path="currentFolderPath" @file-click="handleFileClick">
       <template #actions="{ file }">
         <el-button v-if="file.fileType !== 'dir'" link type="primary" size="small" @click="handleLoadWorkflow(file)">
@@ -37,16 +37,6 @@
         </el-button>
       </template>
     </FileCardList>
-
-    <!-- 加载更多 -->
-    <div class="load-more">
-      <el-button v-if="filteredFiles.length > displayCursor" @click="loadMoreFiles">
-        {{ t('common.loadMore') }}
-      </el-button>
-      <p v-else-if="filteredFiles.length > 0" class="no-more-text">
-        {{ t('common.noMore') }}
-      </p>
-    </div>
 
     <!-- 空状态 -->
     <el-empty v-if="filteredFiles.length === 0 && !loading" :description="t('filesTab.emptyText')" />
@@ -85,7 +75,6 @@ export default defineComponent({
       allFiles: [] as FileInfo[],
       loading: false,
       searchQuery: '',
-      displayCursor: 20,
       comfyApp: null as any
     }
   },
@@ -102,15 +91,11 @@ export default defineComponent({
       return this.allFiles.filter(file =>
         file.name.toLowerCase().includes(searchLower)
       )
-    },
-    displayedFiles(): FileInfo[] {
-      return this.filteredFiles.slice(0, this.displayCursor)
     }
   },
   mounted() {
     this.loadFiles()
     this.setupComfyApp()
-    this.setupScrollListener()
   },
   methods: {
     async loadFiles() {
@@ -136,7 +121,6 @@ export default defineComponent({
         })
 
         this.allFiles = processedFiles
-        this.displayCursor = 20
       } catch (error) {
         console.error('加载文件列表失败:', error)
         ElMessage.error(this.t('filesTab.loadFailed'))
@@ -227,9 +211,6 @@ export default defineComponent({
         }
       }
     },
-    loadMoreFiles() {
-      this.displayCursor += 20
-    },
     setupComfyApp() {
       this.comfyApp = (window.top as any)?.app
 
@@ -238,16 +219,6 @@ export default defineComponent({
           this.loadFiles()
         })
       }
-    },
-    setupScrollListener() {
-      window.addEventListener('scroll', () => {
-        const documentHeight = document.documentElement.scrollHeight
-        const scrollPosition = window.innerHeight + window.scrollY
-
-        if (scrollPosition >= documentHeight && this.filteredFiles.length > this.displayCursor) {
-          this.loadMoreFiles()
-        }
-      })
     }
   }
 })
@@ -271,15 +242,5 @@ export default defineComponent({
 
   .search-input {
     width: 300px;
-  }
-
-  .load-more {
-    text-align: center;
-    padding: 24px 0;
-  }
-
-  .no-more-text {
-    color: var(--el-text-color-secondary);
-    font-size: 14px;
   }
 </style>

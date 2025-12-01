@@ -47,7 +47,7 @@
 import { defineComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete } from '@element-plus/icons-vue'
+import { Delete, Grid, Menu } from '@element-plus/icons-vue'
 import { fetchFilesList, deleteFile } from '@/api/files'
 import type { FileInfo, FolderType } from '@/types'
 import { processFileInfo, processDirectoryInfo } from '@/utils'
@@ -59,6 +59,8 @@ export default defineComponent({
   name: 'FilesTab',
   components: {
     Delete,
+    Grid,
+    Menu,
     FileCardList
   },
   setup() {

@@ -9,6 +9,18 @@ export type FolderType = 'outputs' | 'collections' | 'sources'
 export type FileType = 'image' | 'video' | 'json' | 'dir' | 'html'
 
 /**
+ * 格式化后的详细信息
+ */
+export interface FormattedInfo {
+  models?: string[]
+  loras?: string[]
+  width?: number
+  height?: number
+  positive_prompt?: string
+  negative_prompt?: string
+}
+
+/**
  * 文件信息接口
  */
 export interface FileInfo {
@@ -24,6 +36,9 @@ export interface FileInfo {
   formattedSize?: string
   path?: string
   notes?: string
+  hash?: string
+  tags?: string[]
+  formatted_info?: FormattedInfo
 }
 
 /**
@@ -79,4 +94,6 @@ export interface ImageMetadata {
   positive: string
   negative: string
   has_metadata: boolean
+  formatted_info?: FormattedInfo
+  tags?: string[]
 }

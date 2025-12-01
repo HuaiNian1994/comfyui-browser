@@ -31,6 +31,17 @@
           </div>
         </template>
 
+        <!-- 标签筛选 (新增) -->
+        <el-select v-if="!isManagementMode" v-model="selectedTags" multiple collapse-tags collapse-tags-tooltip
+          placeholder="Filter Tags" style="width: 200px" clearable class="tag-filter">
+          <template #prefix>
+            <el-icon>
+              <Filter />
+            </el-icon>
+          </template>
+          <el-option v-for="tag in allTags" :key="tag" :label="tag" :value="tag" />
+        </el-select>
+
         <!-- 搜索框 (仅在非管理模式或空间足够时显示) -->
         <el-input v-if="!isManagementMode" v-model="internalSearchQuery" :placeholder="t('common.searchPlaceholder')"
           clearable class="search-input">
@@ -84,8 +95,36 @@
         <!-- 文件信息 -->
         <div class="file-info">
           <p class="file-name" :title="file.name">{{ file.name }}</p>
+
+          <!-- 详细元数据展示 -->
+          <div v-if="file.formatted_info" class="file-details">
+            <el-tag v-if="file.formatted_info.width && file.formatted_info.height" size="small" type="info"
+              effect="plain" class="detail-tag">
+              {{ file.formatted_info.width }}x{{ file.formatted_info.height }}
+            </el-tag>
+            <el-tooltip v-if="file.formatted_info.models && file.formatted_info.models.length > 0"
+              :content="file.formatted_info.models.join(', ')" placement="top">
+              <el-tag size="small" type="success" effect="plain" class="detail-tag model-tag">
+                {{ file.formatted_info.models[0] }}
+              </el-tag>
+            </el-tooltip>
+          </div>
+
           <p class="file-meta">{{ file.formattedDatetime }}</p>
           <p v-if="file.formattedSize" class="file-meta">{{ file.formattedSize }}</p>
+
+          <!-- 标签展示 -->
+          <div class="file-tags" @click.stop>
+            <el-tag v-for="tag in file.tags" :key="tag" class="tag-item" closable size="small"
+              @close="handleCloseTag(file, tag)">
+              {{ tag }}
+            </el-tag>
+            <el-input v-if="inputVisibleMap[file.name]" ref="tagInputRef" v-model="inputValueMap[file.name]"
+              class="input-new-tag" size="small" @keyup.enter="handleTagInputConfirm(file)"
+              @blur="handleTagInputConfirm(file)" />
+            <el-button v-else class="button-new-tag" size="small" :icon="Plus" circle
+              @click="showTagInput(file)"></el-button>
+          </div>
         </div>
 
         <!-- 操作按钮 (仅非管理模式显示) -->
@@ -112,12 +151,28 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, type PropType } from 'vue'
+import { defineComponent, type PropType, ref, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Folder, Document, Search, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
+import { Folder, Document, Search, ZoomIn, ZoomOut, Plus, Filter } from '@element-plus/icons-vue'
+import {
+  ElMessage,
+  ElInput,
+  ElSelect,
+  ElOption,
+  ElTag,
+  ElTooltip,
+  ElButton,
+  ElButtonGroup,
+  ElSlider,
+  ElPagination,
+  ElImage,
+  ElIcon,
+  ElCheckbox,
+  ElEmpty
+} from 'element-plus'
 import type { FileInfo, FolderType } from '@/types'
 import ImagePreviewDialog from './ImagePreviewDialog.vue'
-
+import { addFileTag, removeFileTag, fetchAllTags } from '@/api/files'
 export default defineComponent({
   name: 'FileCardList',
   components: {
@@ -126,7 +181,22 @@ export default defineComponent({
     Search,
     ZoomIn,
     ZoomOut,
-    ImagePreviewDialog
+    Plus,
+    Filter,
+    ImagePreviewDialog,
+    ElInput,
+    ElSelect,
+    ElOption,
+    ElTag,
+    ElTooltip,
+    ElButton,
+    ElButtonGroup,
+    ElSlider,
+    ElPagination,
+    ElImage,
+    ElIcon,
+    ElCheckbox,
+    ElEmpty
   },
   props: {
     files: {
@@ -162,10 +232,92 @@ export default defineComponent({
       default: ''
     }
   },
-  emits: ['file-click', 'page-change', 'refresh'],
-  setup() {
+  emits: ['file-click', 'page-change', 'refresh', 'update-file'],
+  setup(props) {
     const { t } = useI18n()
-    return { t }
+
+    // Tag Input Refs
+    const tagInputRef = ref<InstanceType<typeof ElInput>>()
+
+    // Tag management state
+    const inputVisibleMap = ref<Record<string, boolean>>({})
+    const inputValueMap = ref<Record<string, string>>({})
+
+    // Search & Filter state
+    const allTags = ref<string[]>([])
+    const selectedTags = ref<string[]>([])
+
+    const loadTags = async () => {
+      try {
+        allTags.value = await fetchAllTags()
+      } catch (e) {
+        console.error("Failed to load tags", e)
+      }
+    }
+
+    onMounted(() => {
+      loadTags()
+    })
+
+    const showTagInput = (file: FileInfo) => {
+      inputVisibleMap.value[file.name] = true
+      nextTick(() => {
+        tagInputRef.value?.input?.focus()
+      })
+    }
+
+    const handleTagInputConfirm = async (file: FileInfo) => {
+      const inputValue = inputValueMap.value[file.name]
+      if (inputValue) {
+        try {
+          const { tags } = await addFileTag(props.folderType, file.name, inputValue, props.folderPath)
+          // Update local file data
+          if (file.tags) {
+            file.tags = tags
+          } else {
+            file.tags = tags
+          }
+          // Refresh global tag list if it's a new tag
+          if (!allTags.value.includes(inputValue)) {
+            allTags.value.push(inputValue)
+            allTags.value.sort()
+          }
+          ElMessage.success(t('common.addSuccess'))
+        } catch (error) {
+          console.error('Failed to add tag:', error)
+          ElMessage.error(t('common.addFailed'))
+        }
+      }
+      inputVisibleMap.value[file.name] = false
+      inputValueMap.value[file.name] = ''
+    }
+
+    const handleCloseTag = async (file: FileInfo, tag: string) => {
+      try {
+        const { tags } = await removeFileTag(props.folderType, file.name, tag, props.folderPath)
+        // Update local file data
+        if (file.tags) {
+          file.tags = tags
+        }
+        ElMessage.success(t('common.deleteSuccess'))
+      } catch (error) {
+        console.error('Failed to remove tag:', error)
+        ElMessage.error(t('common.deleteFailed'))
+      }
+    }
+
+    return {
+      t,
+      tagInputRef,
+      inputVisibleMap,
+      inputValueMap,
+      allTags,
+      selectedTags,
+      showTagInput,
+      handleTagInputConfirm,
+      handleCloseTag,
+      Plus
+    }
   },
   data() {
     return {
@@ -185,8 +337,18 @@ export default defineComponent({
   },
   computed: {
     filteredFiles(): FileInfo[] {
+      // 1. Tag Filtering
+      let result = this.files
+      if (this.selectedTags.length > 0) {
+        result = result.filter(file => {
+          if (!file.tags) return false
+          // File must have ALL selected tags (AND logic)
+          return this.selectedTags.every(tag => file.tags!.includes(tag))
+        })
+      }
+
       if (!this.internalSearchQuery.trim()) {
-        return this.files
+        return result
       }
 
       const terms = this.internalSearchQuery.trim().split(/\s+/)
@@ -198,10 +360,20 @@ export default defineComponent({
         if (file.name) values.push(file.name)
         if (file.formattedDatetime) values.push(file.formattedDatetime)
         if (file.formattedSize) values.push(file.formattedSize)
+
+        // Add metadata to search index
+        if (file.formatted_info) {
+          if (file.formatted_info.models) values.push(...file.formatted_info.models)
+          if (file.formatted_info.loras) values.push(...file.formatted_info.loras)
+          if (file.formatted_info.positive_prompt) values.push(file.formatted_info.positive_prompt)
+          if (file.formatted_info.negative_prompt) values.push(file.formatted_info.negative_prompt)
+        }
+        if (file.tags) values.push(...file.tags)
+
         return values.join(' ')
       }
 
-      return this.files.filter(file => {
+      return result.filter(file => {
         const content = getDisplayValues(file).toLowerCase()
 
         const hasAllIncludes = includeTerms.every(term => content.includes(term))
@@ -514,5 +686,47 @@ export default defineComponent({
     :deep(.el-button) {
       padding: 0;
     }
+  }
+
+  .file-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+
+  .detail-tag {
+    height: 20px;
+    padding: 0 4px;
+    font-size: 10px;
+  }
+
+  .model-tag {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .file-tags {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .tag-item {
+    margin-right: 0;
+  }
+
+  .button-new-tag {
+    height: 24px;
+    width: 24px;
+    padding: 0;
+  }
+
+  .input-new-tag {
+    width: 90px;
+    height: 24px;
+    font-size: 12px;
   }
 </style>

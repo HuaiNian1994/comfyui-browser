@@ -37,12 +37,12 @@ export const deleteFile = async (
 }
 
 /**
- * 更新文件（重命名、移动或修改备注）
+ * 更新文件（重命名、移动、修改备注或标签）
  */
 export const updateFile = async (
   folderType: FolderType,
   filename: string,
-  newData: { filename?: string; notes?: string; folder_path?: string },
+  newData: { filename?: string; notes?: string; folder_path?: string; tags?: string[] },
   folderPath?: string
 ): Promise<void> => {
   const data: Record<string, any> = {
@@ -95,4 +95,56 @@ export const fetchImageMetadata = async (
 
   const response = await apiClient.get<ImageMetadata>('/files/metadata', { params })
   return response.data
+}
+
+/**
+ * 为文件添加标签
+ */
+export const addFileTag = async (
+  folderType: FolderType,
+  filename: string,
+  tag: string,
+  folderPath?: string
+): Promise<{ tags: string[] }> => {
+  const data: Record<string, any> = {
+    folder_type: folderType,
+    filename: filename,
+    tag: tag,
+  }
+  if (folderPath) {
+    data.folder_path = folderPath
+  }
+
+  const response = await apiClient.post<{ tags: string[] }>('/files/tag', data)
+  return response.data
+}
+
+/**
+ * 从文件移除标签
+ */
+export const removeFileTag = async (
+  folderType: FolderType,
+  filename: string,
+  tag: string,
+  folderPath?: string
+): Promise<{ tags: string[] }> => {
+  const data: Record<string, any> = {
+    folder_type: folderType,
+    filename: filename,
+    tag: tag,
+  }
+  if (folderPath) {
+    data.folder_path = folderPath
+  }
+
+  const response = await apiClient.delete<{ tags: string[] }>('/files/tag', { data })
+  return response.data
+}
+
+/**
+ * 获取所有已使用的标签
+ */
+export const fetchAllTags = async (): Promise<string[]> => {
+  const response = await apiClient.get<{ all_tags: string[] }>('/files/tags')
+  return response.data.all_tags
 }

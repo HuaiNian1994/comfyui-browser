@@ -49,7 +49,11 @@ def get_target_folder_files(folder_path: str, folder_type: FolderType = 'outputs
         if item.is_file() and ext not in WHITE_EXTENSIONS:
             continue
 
-        created_at = item.stat().st_ctime
+        stat = item.stat()
+        created_at = stat.st_ctime
+        mtime = stat.st_mtime
+        bytes_size = stat.st_size if item.is_file() else 0
+        
         info_file_path = get_info_filename(item.path)
         notes = ""
         
@@ -65,8 +69,9 @@ def get_target_folder_files(folder_path: str, folder_type: FolderType = 'outputs
         file_info = {
             "type": "dir" if item.is_dir() else "file",
             "name": name,
-            "bytes": item.stat().st_size if item.is_file() else 0,
+            "bytes": bytes_size,
             "created_at": created_at,
+            "mtime": mtime,
             "folder_path": folder_path,
             "notes": notes
         }

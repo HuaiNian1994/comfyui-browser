@@ -41,6 +41,13 @@
             <el-slider v-model="cardScale" :min="0.5" :max="3" :step="0.1" :show-tooltip="false" />
           </div>
 
+          <el-button :loading="isReindexing" @click="handleReindex">
+            <el-icon>
+              <Refresh />
+            </el-icon>
+            {{ t('common.btn.refresh') }}
+          </el-button>
+
           <!-- 视图切换 -->
           <el-button-group class="view-toggle">
             <el-button :type="viewMode === 'grid' ? 'primary' : 'default'" @click="viewMode = 'grid'">
@@ -259,7 +266,7 @@
 <script lang="ts">
 import { defineComponent, type PropType, ref, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Folder, Document, Search, ZoomIn, ZoomOut, Plus, Filter, Menu, Grid } from '@element-plus/icons-vue'
+import { Folder, Document, Search, ZoomIn, ZoomOut, Plus, Filter, Menu, Grid, Refresh } from '@element-plus/icons-vue'
 import {
   ElMessage,
   ElInput,
@@ -278,7 +285,7 @@ import {
 } from 'element-plus'
 import type { FileInfo, FolderType } from '@/types'
 import ImagePreviewDialog from './ImagePreviewDialog.vue'
-import { addFileTag, removeFileTag, fetchAllTags } from '@/api/files'
+import { addFileTag, removeFileTag, fetchAllTags, reindexFiles } from '@/api/files'
 
 export default defineComponent({
   name: 'FileCardList',
@@ -292,6 +299,7 @@ export default defineComponent({
     Filter,
     Menu,
     Grid,
+    Refresh,
     ImagePreviewDialog,
     ElInput,
     ElSelect,
@@ -444,7 +452,8 @@ export default defineComponent({
       cardScale: 1,
       // 新增状态
       viewMode: 'grid' as 'grid' | 'list',
-      selectedSearchDimensions: [] as string[]
+      selectedSearchDimensions: [] as string[],
+      isReindexing: false
     }
   },
   computed: {
@@ -643,6 +652,22 @@ export default defineComponent({
     invertDimensions() {
       const all = this.searchDimensionsOptions.map(d => d.value)
       this.selectedSearchDimensions = all.filter(d => !this.selectedSearchDimensions.includes(d))
+    },
+    async handleReindex() {
+      if (this.isReindexing) {
+        return
+      }
+      this.isReindexing = true
+      try {
+        await reindexFiles(this.folderType as FolderType, this.folderPath || undefined)
+        this.$emit('refresh')
+        ElMessage.success(this.t('common.reindexSuccess'))
+      } catch (error) {
+        console.error('Reindex files failed:', error)
+        ElMessage.error(this.t('common.reindexFailed'))
+      } finally {
+        this.isReindexing = false
+      }
     }
   }
 })

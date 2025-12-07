@@ -148,3 +148,33 @@ export const fetchAllTags = async (): Promise<string[]> => {
   const response = await apiClient.get<{ all_tags: string[] }>('/files/tags')
   return response.data.all_tags
 }
+
+export interface ReindexResponse {
+  folder_type: FolderType
+  folder_path?: string
+  indexed_folders: number
+  indexed_files: number
+}
+
+/**
+ * 在系统文件管理器中打开指定目录
+ */
+export const openFolderOnSystem = async (folderType: FolderType, folderPath?: string): Promise<void> => {
+  const data: Record<string, string> = { folder_type: folderType }
+  if (folderPath) {
+    data.folder_path = folderPath
+  }
+  await apiClient.post('/files/open-folder', data)
+}
+
+/**
+ * 清空数据库索引并重新索引
+ */
+export const reindexFiles = async (folderType: FolderType, folderPath?: string): Promise<ReindexResponse> => {
+  const data: Record<string, string> = { folder_type: folderType }
+  if (folderPath) {
+    data.folder_path = folderPath
+  }
+  const response = await apiClient.post<ReindexResponse>('/files/reindex', data)
+  return response.data
+}

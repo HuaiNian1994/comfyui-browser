@@ -3,12 +3,23 @@ import json
 from os import path
 import os
 import shutil
+import subprocess
+import sys
 
 from ..utils import get_target_folder_files, get_parent_path, get_info_filename, extract_comfyui_png_metadata, extract_detailed_metadata
 from ..constants import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from ..services.db_service import DBService
 
 db_service = DBService()
+
+def normalize_folder_path(folder_path: str) -> str:
+    """
+    将前端传入的路径标准化为相对路径，统一分隔符并去除首尾的分隔符。
+    """
+    if not folder_path:
+        return ''
+    return folder_path.strip('/').replace('\\', '/')
+
 
 def update_file_info(file_path, notes=None, tags=None):
     """辅助函数：更新 .info 文件中的 notes 和 tags"""
@@ -37,48 +48,41 @@ def update_file_info(file_path, notes=None, tags=None):
         print(f"Error writing info file {info_file_path}: {e}")
 
 
-# folder_path, folder_type
-async def api_get_files(request):
-    folder_path = request.query.get('folder_path', '')
-    folder_type = request.query.get('folder_type', 'outputs')
-    
-    # 1. Get disk files (Disk Scan - fast)
-    disk_files = get_target_folder_files(folder_path, folder_type=folder_type)
+def synchronize_folder(folder_path: str, folder_type: str):
+    """
+    同步指定目录的磁盘文件与数据库记录，返回带有元数据的文件列表。
+    """
+    normalized_folder_path = normalize_folder_path(folder_path)
+    disk_files = get_target_folder_files(normalized_folder_path, folder_type=folder_type)
 
     if disk_files is None:
-        return web.Response(status=404)
+        return []
 
-    # 2. Get DB records (DB Query - fast)
-    db_files_map = db_service.get_files_in_folder(folder_path, folder_type)
-    
-    # 3. Synchronization
+    db_files_map = db_service.get_files_in_folder(normalized_folder_path, folder_type)
     disk_files_map = {f['name']: f for f in disk_files}
     parent_path = get_parent_path(folder_type)
-    
-    # Check for updates or new files
+
+    # 检查新增或修改文件
     for file_info in disk_files:
         if file_info['type'] == 'dir':
             continue
-            
+
         filename = file_info['name']
         mtime = file_info.get('mtime', 0)
         size = file_info.get('bytes', 0)
-        
+
         should_update = False
         if filename not in db_files_map:
-            should_update = True # New file
+            should_update = True
         else:
             db_record = db_files_map[filename]
-            # Compare mtime and size (allow small tolerance for float mtime)
             if abs(db_record['mtime'] - mtime) > 0.001 or db_record['bytes'] != size:
-                should_update = True # Modified file
-        
+                should_update = True
+
         if should_update:
-            full_path = path.join(parent_path, folder_path, filename)
-            # Extract detailed metadata (Expensive I/O + JSON parse)
+            full_path = path.join(parent_path, normalized_folder_path, filename) if normalized_folder_path else path.join(parent_path, filename)
             metadata = extract_detailed_metadata(full_path)
-            
-            # Extract tags from .info file if they exist (Recovery Mechanism)
+
             tags_from_disk = []
             info_file_path = get_info_filename(full_path)
             if path.exists(info_file_path):
@@ -89,21 +93,12 @@ async def api_get_files(request):
                 except Exception:
                     pass
 
-            # Create hash (simple string concat as requested)
             hash_val = f"{full_path}{file_info['created_at']}{size}"
-            
-            # If recovering, pass tags_from_disk. If updating existing with new metadata, 
-            # we should preserve existing DB tags unless disk has something (conflict resolution).
-            # Here we assume: Database is master, but if DB entry is new/missing, Disk is master.
-            # upsert_file handles preservation if tags=None. 
-            # But if we found tags on disk for a new/updated file, we should probably use them 
-            # OR merge them? For simplicity, if we found tags on disk, we use them.
-            
             tags_to_save = tags_from_disk if tags_from_disk else None
 
             db_service.upsert_file(
                 filename=filename,
-                folder_path=folder_path,
+                folder_path=normalized_folder_path,
                 folder_type=folder_type,
                 bytes_size=size,
                 created_at=file_info['created_at'],
@@ -112,13 +107,12 @@ async def api_get_files(request):
                 formatted_info=metadata,
                 tags=tags_to_save
             )
-            
-            # Update the map entry so the response is fresh
+
             current_tags = tags_to_save if tags_to_save is not None else db_files_map.get(filename, {}).get('tags', [])
 
             db_files_map[filename] = {
                 'filename': filename,
-                'folder_path': folder_path,
+                'folder_path': normalized_folder_path,
                 'folder_type': folder_type,
                 'bytes': size,
                 'created_at': file_info['created_at'],
@@ -128,29 +122,27 @@ async def api_get_files(request):
                 'tags': current_tags
             }
 
-    # Check for deleted files
+    # 检查已删除文件
     to_delete = []
     for db_filename in db_files_map:
         if db_filename not in disk_files_map:
             to_delete.append(db_filename)
-    
+
     if to_delete:
-        db_service.delete_files(folder_path, folder_type, to_delete)
+        db_service.delete_files(normalized_folder_path, folder_type, to_delete)
         for f in to_delete:
             del db_files_map[f]
 
-    # 4. Merge results
-    # We return the disk_files list but enriched with DB metadata
+    # 合并结果
     response_files = []
     for file_info in disk_files:
         if file_info['type'] == 'dir':
             response_files.append(file_info)
             continue
-            
+
         filename = file_info['name']
         if filename in db_files_map:
             db_record = db_files_map[filename]
-            # Merge DB info into response
             file_info.update({
                 'hash': db_record.get('hash'),
                 'formatted_info': db_record.get('formatted_info'),
@@ -158,8 +150,115 @@ async def api_get_files(request):
             })
         response_files.append(file_info)
 
+    return response_files
+
+
+# folder_path, folder_type
+async def api_get_files(request):
+    folder_path = request.query.get('folder_path', '')
+    folder_type = request.query.get('folder_type', 'outputs')
+    
+    # 1. Get disk files (Disk Scan - fast)
+    parent_path = get_parent_path(folder_type)
+    target_path = path.join(parent_path, normalize_folder_path(folder_path))
+    if folder_path and not path.exists(target_path):
+        return web.Response(status=404)
+
+    response_files = synchronize_folder(folder_path, folder_type)
+
     return web.json_response({
         'files': response_files
+    })
+
+
+def iter_relative_folders(target_root: str, base_root: str):
+    """生成目标目录及其子目录的相对路径（以 / 分隔）。"""
+    for current_dir, _, _ in os.walk(target_root):
+        rel_path = path.relpath(current_dir, base_root)
+        if rel_path == '.':
+            yield ''
+        else:
+            yield rel_path.replace('\\', '/')
+
+
+def open_system_folder(target_folder: str) -> bool:
+    """在系统文件管理器中打开目标文件夹。"""
+    try:
+        if sys.platform.startswith('win'):
+            os.startfile(target_folder)  # type: ignore[attr-defined]
+        elif sys.platform == 'darwin':
+            subprocess.run(['open', target_folder], check=False)
+        else:
+            subprocess.run(['xdg-open', target_folder], check=False)
+        return True
+    except Exception as e:
+        print(f"Open folder failed: {e}")
+        return False
+
+
+async def api_open_folder(request):
+    """
+    在操作系统文件资源管理器中打开指定目录。
+    """
+    json_data = await request.json()
+    folder_type = json_data.get('folder_type', 'outputs')
+    folder_path = normalize_folder_path(json_data.get('folder_path', ''))
+
+    parent_path = get_parent_path(folder_type)
+    normalized_parent = path.abspath(parent_path)
+    target_path = path.abspath(path.join(parent_path, folder_path))
+
+    if not target_path.startswith(normalized_parent):
+        return web.Response(status=400, text="Invalid path")
+    if not path.exists(target_path):
+        return web.Response(status=404, text="Folder not found")
+    if not path.isdir(target_path):
+        target_path = path.dirname(target_path)
+        if not target_path or not path.isdir(target_path):
+            return web.Response(status=400, text="Target is not a directory")
+
+    if not open_system_folder(target_path):
+        return web.Response(status=500, text="Failed to open folder")
+
+    return web.json_response({"opened": True, "path": target_path})
+
+
+async def api_reindex_files(request):
+    """
+    清空指定目录对应的索引记录并重新索引。
+    """
+    try:
+        json_data = await request.json()
+    except Exception:
+        json_data = {}
+
+    folder_type = json_data.get('folder_type', 'outputs')
+    folder_path = normalize_folder_path(json_data.get('folder_path', ''))
+
+    parent_path = get_parent_path(folder_type)
+    normalized_parent = path.abspath(parent_path)
+    target_root = path.abspath(path.join(parent_path, folder_path))
+
+    if not target_root.startswith(normalized_parent):
+        return web.Response(status=400, text="Invalid path")
+    if not path.exists(target_root):
+        return web.Response(status=404, text="Target path not found")
+
+    db_service.clear_records(folder_type, folder_path or None)
+
+    indexed_folders = 0
+    indexed_files = 0
+
+    for relative_path in iter_relative_folders(target_root, normalized_parent):
+        files_in_folder = synchronize_folder(relative_path, folder_type)
+        indexed_folders += 1
+        indexed_files += len([f for f in files_in_folder if f.get('type') != 'dir'])
+
+    return web.json_response({
+        "folder_type": folder_type,
+        "folder_path": folder_path,
+        "indexed_folders": indexed_folders,
+        "indexed_files": indexed_files
     })
 
 

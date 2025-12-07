@@ -40,6 +40,8 @@
     "deleteSuccess": "Deleted successfully",
     "addFailed": "Failed to add",
     "deleteFailed": "Failed to delete",
+    "reindexSuccess": "Index rebuilt successfully",
+    "reindexFailed": "Failed to rebuild index",
     "btn": {
       "load": "Load",
       "save": "Save",

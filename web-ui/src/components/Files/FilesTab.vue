@@ -6,10 +6,10 @@
       <template #header>
         <el-breadcrumb separator="/" class="breadcrumb">
           <el-breadcrumb-item>
-            <el-button link @click="navigateToPath(-1)">{{ t('common.rootDir') }}</el-button>
+            <el-button link @click="handleBreadcrumbClick(-1)">{{ t('common.rootDir') }}</el-button>
           </el-breadcrumb-item>
           <el-breadcrumb-item v-for="(pathPart, index) in currentPathParts" :key="index">
-            <el-button link @click="navigateToPath(index)">{{ pathPart }}</el-button>
+            <el-button link @click="handleBreadcrumbClick(index)">{{ pathPart }}</el-button>
           </el-breadcrumb-item>
         </el-breadcrumb>
       </template>
@@ -48,7 +48,7 @@ import { defineComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Grid, Menu } from '@element-plus/icons-vue'
-import { fetchFilesList, deleteFile } from '@/api/files'
+import { fetchFilesList, deleteFile, openFolderOnSystem } from '@/api/files'
 import type { FileInfo, FolderType } from '@/types'
 import { processFileInfo, processDirectoryInfo } from '@/utils'
 import { batchDeleteFiles, batchCollectFiles } from '@/utils/batch-actions'
@@ -114,6 +114,22 @@ export default defineComponent({
         ElMessage.error(this.t('filesTab.loadFailed'))
       } finally {
         this.loading = false
+      }
+    },
+    async handleBreadcrumbClick(index: number) {
+      const targetPath = index === -1
+        ? ''
+        : this.currentPathParts
+          .slice(0, index + 1)
+          .join('/')
+      await this.openFolderInExplorer(targetPath)
+      this.navigateToPath(index)
+    },
+    async openFolderInExplorer(targetPath: string) {
+      try {
+        await openFolderOnSystem(this.folderType, targetPath || undefined)
+      } catch (error) {
+        console.error('打开文件夹失败:', error)
       }
     },
     navigateToPath(index: number) {

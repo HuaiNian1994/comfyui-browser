@@ -59,10 +59,10 @@
         <template #header>
           <el-breadcrumb separator="/" class="breadcrumb">
             <el-breadcrumb-item>
-              <el-button link @click="navigateToPath(-1)">{{ currentSource.name }}</el-button>
+              <el-button link @click="handleBreadcrumbClick(-1)">{{ currentSource.name }}</el-button>
             </el-breadcrumb-item>
             <el-breadcrumb-item v-for="(pathPart, index) in currentPathParts" :key="index">
-              <el-button link @click="navigateToPath(index)">{{ pathPart }}</el-button>
+              <el-button link @click="handleBreadcrumbClick(index)">{{ pathPart }}</el-button>
             </el-breadcrumb-item>
           </el-breadcrumb>
         </template>
@@ -134,7 +134,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Document, Link, Refresh, Delete } from '@element-plus/icons-vue'
 import { fetchSources, fetchAllSources, addSource, deleteSource, syncSource } from '@/api/sources'
-import { fetchFilesList } from '@/api/files'
+import { fetchFilesList, openFolderOnSystem } from '@/api/files'
 import type { Source } from '@/api/sources'
 import type { FileInfo, FolderType } from '@/types'
 import { processFileInfo, processDirectoryInfo } from '@/utils'
@@ -226,6 +226,21 @@ export default defineComponent({
         ElMessage.error(this.t('sourcesTab.loadRecommendedFailed'))
       } finally {
         this.loadingAllSources = false
+      }
+    },
+    async handleBreadcrumbClick(index: number) {
+      if (!this.currentSource) return
+      const targetPath = index === -1
+        ? this.currentSource.name
+        : [this.currentSource.name, ...this.currentPathParts.slice(0, index + 1)].join('/')
+      await this.openFolderInExplorer(targetPath)
+      this.navigateToPath(index)
+    },
+    async openFolderInExplorer(targetPath: string) {
+      try {
+        await openFolderOnSystem('sources' as FolderType, targetPath)
+      } catch (error) {
+        console.error('打开文件夹失败:', error)
       }
     },
     async handleSourceClick(source: Source) {

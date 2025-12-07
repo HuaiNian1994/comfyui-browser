@@ -40,6 +40,8 @@
     "deleteSuccess": "删除成功",
     "addFailed": "添加失败",
     "deleteFailed": "删除失败",
+    "reindexSuccess": "索引已刷新",
+    "reindexFailed": "刷新索引失败",
     "btn": {
       "load": "加载",
       "save": "收藏",

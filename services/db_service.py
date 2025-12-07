@@ -177,3 +177,23 @@ class DBService:
         
         conn.close()
         return sorted(list(all_tags))
+
+    def clear_records(self, folder_type: str, folder_path: Optional[str] = None):
+        """
+        删除指定范围的索引记录。如果未提供 folder_path，则清空该 folder_type 下的全部记录。
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        if folder_path:
+            normalized_folder = folder_path.rstrip('/')
+            like_pattern = f"{normalized_folder}/%"
+            cursor.execute(
+                "DELETE FROM files WHERE folder_type = ? AND (folder_path = ? OR folder_path LIKE ?)",
+                (folder_type, normalized_folder, like_pattern)
+            )
+        else:
+            cursor.execute("DELETE FROM files WHERE folder_type = ?", (folder_type,))
+
+        conn.commit()
+        conn.close()

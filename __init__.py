@@ -17,6 +17,8 @@ browser_app.add_routes([
     web.put("/files", files.api_update_file),
     web.get("/files/view", files.api_view_file),
     web.get("/files/metadata", files.api_get_image_metadata),
+    web.post("/files/open-folder", files.api_open_folder),
+    web.post("/files/reindex", files.api_reindex_files),
     web.post("/files/tag", files.api_add_tag_to_file),
     web.delete("/files/tag", files.api_remove_tag_from_file),
     web.get("/files/tags", files.api_get_all_tags),

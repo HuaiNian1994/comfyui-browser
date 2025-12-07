@@ -88,6 +88,17 @@ export interface DownloadTask {
 }
 
 /**
+ * 浏览器配置
+ */
+export interface BrowserConfig {
+  outputs: string
+  collections: string
+  sources: string
+  download_logs: string
+  git_repo?: string
+}
+
+/**
  * 图片元数据接口
  */
 export interface ImageMetadata {

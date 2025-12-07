@@ -387,7 +387,8 @@ export default defineComponent({
       const inputValue = inputValueMap.value[file.name]
       if (inputValue) {
         try {
-          const { tags } = await addFileTag(props.folderType, file.name, inputValue, props.folderPath)
+          const targetFolderPath = file.folder_path || props.folderPath
+          const { tags } = await addFileTag(props.folderType, file.name, inputValue, targetFolderPath)
           // Update local file data
           if (file.tags) {
             file.tags = tags
@@ -411,7 +412,8 @@ export default defineComponent({
 
     const handleCloseTag = async (file: FileInfo, tag: string) => {
       try {
-        const { tags } = await removeFileTag(props.folderType, file.name, tag, props.folderPath)
+        const targetFolderPath = file.folder_path || props.folderPath
+        const { tags } = await removeFileTag(props.folderType, file.name, tag, targetFolderPath)
         // Update local file data
         if (file.tags) {
           file.tags = tags
@@ -447,7 +449,7 @@ export default defineComponent({
       currentPreviewIndex: -1,
       // 管理模式相关
       isManagementMode: false,
-      selectedFiles: new Set<string>(), // 存储选中文件的 name
+      selectedFiles: new Set<string>(), // 存储选中文件的唯一标识
       isBatchProcessing: false,
       cardScale: 1,
       // 新增状态
@@ -537,11 +539,11 @@ export default defineComponent({
     },
     isAllSelected(): boolean {
       if (this.filteredFiles.length === 0) return false
-      return this.filteredFiles.every(f => this.selectedFiles.has(f.name))
+      return this.filteredFiles.every(f => this.selectedFiles.has(this.getFileKey(f)))
     },
     selectedFilesArray(): FileInfo[] {
-      const selectedNames = this.selectedFiles
-      return this.files.filter(f => selectedNames.has(f.name))
+      const selectedKeys = this.selectedFiles
+      return this.files.filter(f => selectedKeys.has(this.getFileKey(f)))
     },
     hasBatchActions(): boolean {
       return !!this.$slots['batch-actions']
@@ -552,10 +554,10 @@ export default defineComponent({
       this.handleFilesChange()
       // 文件列表变化时，清理不在列表中的选中项
       if (this.isManagementMode) {
-        const currentNames = new Set(this.files.map(f => f.name))
-        for (const name of this.selectedFiles) {
-          if (!currentNames.has(name)) {
-            this.selectedFiles.delete(name)
+        const currentKeys = new Set(this.files.map(f => this.getFileKey(f)))
+        for (const key of this.selectedFiles) {
+          if (!currentKeys.has(key)) {
+            this.selectedFiles.delete(key)
           }
         }
       }
@@ -573,6 +575,15 @@ export default defineComponent({
       if (this.currentPage > maxPage) {
         this.currentPage = maxPage
       }
+    },
+    getFileKey(file: FileInfo): string {
+      if (file.hash) {
+        return file.hash
+      }
+      if (file.folder_path) {
+        return `${file.folder_path}/${file.name}`
+      }
+      return file.name
     },
     handleCardClick(file: FileInfo) {
       if (this.isManagementMode) {
@@ -594,7 +605,7 @@ export default defineComponent({
     updatePreviewState(file: FileInfo) {
       this.previewImageUrl = file.previewUrl || ''
       this.previewImageName = file.name
-      this.currentPreviewIndex = this.previewableFiles.findIndex(f => f.name === file.name)
+      this.currentPreviewIndex = this.previewableFiles.findIndex(f => this.getFileKey(f) === this.getFileKey(file))
     },
     handlePageChange(page: number) {
       this.currentPage = page
@@ -616,28 +627,30 @@ export default defineComponent({
       }
     },
     isSelected(file: FileInfo): boolean {
-      return this.selectedFiles.has(file.name)
+      return this.selectedFiles.has(this.getFileKey(file))
     },
     toggleSelection(file: FileInfo) {
-      if (this.selectedFiles.has(file.name)) {
-        this.selectedFiles.delete(file.name)
+      const key = this.getFileKey(file)
+      if (this.selectedFiles.has(key)) {
+        this.selectedFiles.delete(key)
       } else {
-        this.selectedFiles.add(file.name)
+        this.selectedFiles.add(key)
       }
     },
     handleSelectAll() {
       if (this.isAllSelected) {
         this.selectedFiles.clear()
       } else {
-        this.filteredFiles.forEach(f => this.selectedFiles.add(f.name))
+        this.filteredFiles.forEach(f => this.selectedFiles.add(this.getFileKey(f)))
       }
     },
     handleInvertSelect() {
       this.filteredFiles.forEach(f => {
-        if (this.selectedFiles.has(f.name)) {
-          this.selectedFiles.delete(f.name)
+        const key = this.getFileKey(f)
+        if (this.selectedFiles.has(key)) {
+          this.selectedFiles.delete(key)
         } else {
-          this.selectedFiles.add(f.name)
+          this.selectedFiles.add(key)
         }
       })
     },
@@ -708,6 +721,18 @@ export default defineComponent({
     display: flex;
     align-items: center;
     gap: 12px;
+  }
+
+  .left-actions {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .header-slot {
+    flex: 0 1 60vw;
+    max-width: 60vw;
+    min-width: 0;
+    width: 60vw;
   }
 
   .search-container {

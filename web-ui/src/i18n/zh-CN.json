@@ -65,7 +65,14 @@
     "deleteConfirm": "确定要删除文件",
     "deleteSuccess": "文件已删除",
     "deleteFailed": "删除文件失败",
-    "loadFailed": "加载文件列表失败"
+    "loadFailed": "加载文件列表失败",
+    "directorySelectPlaceholder": "选择要读取的目录（可多选）",
+    "directoryInputPlaceholder": "输入输出目录下的相对路径，例如 samples 或 images/2025",
+    "unknownBasePath": "输出目录未配置",
+    "outputsRoot": "输出根目录",
+    "directoryPathRequired": "请输入目录路径",
+    "directoryOutsideBase": "仅支持输出目录下的相对路径",
+    "directoryInvalid": "目录路径不允许包含 .."
   },
   "collectionsTab": {
     "searchPlaceholder": "搜索文件或备注...",

@@ -1,10 +1,11 @@
 import apiClient from './client'
+import type { BrowserConfig } from '@/types'
 
 /**
  * 获取浏览器配置
  */
-export const getBrowserConfig = async () => {
-  const response = await apiClient.get('/config')
+export const getBrowserConfig = async (): Promise<BrowserConfig> => {
+  const response = await apiClient.get<BrowserConfig>('/config')
   return response.data
 }
 

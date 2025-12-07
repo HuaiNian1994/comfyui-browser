@@ -65,7 +65,14 @@
     "deleteConfirm": "Are you sure to delete this file",
     "deleteSuccess": "File deleted",
     "deleteFailed": "Failed to delete file",
-    "loadFailed": "Failed to load files"
+    "loadFailed": "Failed to load files",
+    "directorySelectPlaceholder": "Select directories to read",
+    "directoryInputPlaceholder": "Enter relative path under outputs, e.g., samples or images/2025",
+    "unknownBasePath": "Outputs path unavailable",
+    "outputsRoot": "Outputs Root",
+    "directoryPathRequired": "Please enter a directory path",
+    "directoryOutsideBase": "Only relative paths under the outputs directory are supported",
+    "directoryInvalid": "Directory path cannot contain .."
   },
   "collectionsTab": {
     "searchPlaceholder": "Filter by filename or notes...",

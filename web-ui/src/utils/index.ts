@@ -25,6 +25,85 @@ export const WHITELIST_EXTENSIONS = ['html', 'image', 'video', 'json', 'dir']
  * localStorage 键名
  */
 export const LOCAL_STORAGE_KEY = 'comfyui-browser'
+const DIRECTORY_STORAGE_KEY = 'directories'
+
+/**
+ * 目录偏好结构
+ */
+export interface DirectoryPreference {
+  path: string
+  checked: boolean
+}
+
+type DirectoryPreferencesMap = Record<string, DirectoryPreference[]>
+
+/**
+ * 将相对路径标准化为以 / 分隔且无首尾分隔符的形式
+ */
+export const normalizeRelativePath = (rawPath: string): string => {
+  if (!rawPath) {
+    return ''
+  }
+  const replaced = rawPath.replace(/\\/g, '/')
+  const trimmed = replaced.replace(/^\/+|\/+$/g, '')
+  return trimmed
+}
+
+/**
+ * 拼接绝对路径（仅用于展示，不做文件系统操作）
+ */
+export const buildAbsolutePath = (basePath: string, relativePath: string): string => {
+  if (!basePath) {
+    return normalizeRelativePath(relativePath)
+  }
+  const normalizedBase = basePath.replace(/\\/g, '/').replace(/\/+$/g, '')
+  const normalizedRelative = normalizeRelativePath(relativePath)
+  if (!normalizedRelative) {
+    return normalizedBase
+  }
+  return `${normalizedBase}/${normalizedRelative}`
+}
+
+/**
+ * 根据相对路径提取目录名
+ */
+export const extractDirectoryName = (relativePath: string, fallback: string): string => {
+  const normalized = normalizeRelativePath(relativePath)
+  if (!normalized) {
+    return fallback
+  }
+  const segments = normalized.split('/')
+  return segments[segments.length - 1] || fallback
+}
+
+/**
+ * 读取指定列表的目录偏好
+ */
+export const getDirectoryPreferences = (listId: string): DirectoryPreference[] => {
+  const localConfig = getLocalConfig()
+  const directoriesMap = (localConfig[DIRECTORY_STORAGE_KEY] || {}) as DirectoryPreferencesMap
+  const preferences = directoriesMap[listId]
+  if (!Array.isArray(preferences)) {
+    return []
+  }
+  return preferences.map((item) => ({
+    path: normalizeRelativePath(item.path),
+    checked: Boolean(item.checked)
+  }))
+}
+
+/**
+ * 写入指定列表的目录偏好
+ */
+export const setDirectoryPreferences = (listId: string, preferences: DirectoryPreference[]): void => {
+  const localConfig = getLocalConfig()
+  const directoriesMap = (localConfig[DIRECTORY_STORAGE_KEY] || {}) as DirectoryPreferencesMap
+  directoriesMap[listId] = preferences.map((item) => ({
+    path: normalizeRelativePath(item.path),
+    checked: Boolean(item.checked)
+  }))
+  setLocalConfig(DIRECTORY_STORAGE_KEY, directoriesMap)
+}
 
 /**
  * 获取文件 URL

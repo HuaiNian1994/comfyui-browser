@@ -41,7 +41,8 @@ export const batchDeleteFiles = async (
 
   for (const file of files) {
     try {
-      await deleteFile(folderType, file.name, folderPath)
+      const targetFolderPath = file.folder_path || folderPath
+      await deleteFile(folderType, file.name, targetFolderPath)
       successCount++
     } catch (error) {
       console.error(`Failed to delete ${file.name}:`, error)
@@ -80,9 +81,10 @@ export const batchCollectFiles = async (
 
   for (const file of files) {
     try {
+      const targetFolderPath = file.folder_path || folderPath
       await addToCollections({
         filename: file.name,
-        folder_path: folderPath,
+        folder_path: targetFolderPath,
         folder_type: folderType
       })
       successCount++

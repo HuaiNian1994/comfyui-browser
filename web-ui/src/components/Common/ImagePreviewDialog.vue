@@ -153,10 +153,11 @@ export default defineComponent({
 
       this.loading = true
       try {
+        const targetFolderPath = file.folder_path || this.folderPath
         this.metadata = await fetchImageMetadata(
           this.folderType,
           file.name,
-          this.folderPath
+          targetFolderPath
         )
       } catch (error) {
         console.error('Failed to load image metadata:', error)

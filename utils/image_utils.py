@@ -99,6 +99,12 @@ def extract_detailed_metadata(image_path: str) -> Dict[str, Any]:
             "height": height
         }
         
+        # 打印原始 PNG info，方便查看最初嵌入的全部字段
+        try:
+            print(json.dumps({"image_path": image_path, "raw_info": img.info}, ensure_ascii=False, indent=2))
+        except Exception:
+            pass
+
         prompt = img.info.get('prompt')
         if prompt:
             prompt_data = json.loads(prompt)
@@ -119,11 +125,23 @@ def extract_detailed_metadata(image_path: str) -> Dict[str, Any]:
                     if ckpt and ckpt not in info["models"]:
                         info["models"].append(ckpt)
                 
+                # UNet loaders (append到 models，前端使用 models 展示主模型信息)
+                if "UNETLoader" in class_type:
+                    unet = inputs.get("unet_name")
+                    if unet and unet not in info["models"]:
+                        info["models"].append(unet)
+                
                 # Loras
                 if "LoraLoader" in class_type:
                     lora = inputs.get("lora_name")
                     if lora and lora not in info["loras"]:
                         info["loras"].append(lora)
+                
+                # LoRA (model-only variant)
+                if "LoraLoaderModelOnly" in class_type:
+                    lora_model_only = inputs.get("lora_name")
+                    if lora_model_only and lora_model_only not in info["loras"]:
+                        info["loras"].append(lora_model_only)
                         
         return info
     except Exception as e:

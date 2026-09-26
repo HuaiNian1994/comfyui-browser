@@ -39,6 +39,7 @@ export interface FileInfo {
   hash?: string
   tags?: string[]
   formatted_info?: FormattedInfo
+  metadata_pending?: boolean
 }
 
 /**

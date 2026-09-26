@@ -9,8 +9,13 @@ import sys
 from ..utils import get_target_folder_files, get_parent_path, get_info_filename, extract_comfyui_png_metadata, extract_detailed_metadata
 from ..constants import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from ..services.db_service import DBService
+from ..services.metadata_indexer import MetadataIndexQueue, MetadataIndexTask
 
 db_service = DBService()
+metadata_index_queue = MetadataIndexQueue(db_service, extract_detailed_metadata)
+
+# 首次列表仅返回基础信息，不在请求路径中同步提取图片元数据，避免阻塞
+INLINE_METADATA_SYNC_LIMIT = 0
 
 def normalize_folder_path(folder_path: str) -> str:
     """
@@ -48,7 +53,13 @@ def update_file_info(file_path, notes=None, tags=None):
         print(f"Error writing info file {info_file_path}: {e}")
 
 
-def synchronize_folder(folder_path: str, folder_type: str):
+def synchronize_folder(
+    folder_path: str,
+    folder_type: str,
+    metadata_limit: int = INLINE_METADATA_SYNC_LIMIT,
+    metadata_queue: MetadataIndexQueue = metadata_index_queue,
+    database: DBService = db_service
+):
     """
     同步指定目录的磁盘文件与数据库记录，返回带有元数据的文件列表。
     """
@@ -58,9 +69,10 @@ def synchronize_folder(folder_path: str, folder_type: str):
     if disk_files is None:
         return []
 
-    db_files_map = db_service.get_files_in_folder(normalized_folder_path, folder_type)
+    db_files_map = database.get_files_in_folder(normalized_folder_path, folder_type)
     disk_files_map = {f['name']: f for f in disk_files}
     parent_path = get_parent_path(folder_type)
+    inline_remaining = max(0, metadata_limit)
 
     # 检查新增或修改文件
     for file_info in disk_files:
@@ -70,33 +82,37 @@ def synchronize_folder(folder_path: str, folder_type: str):
         filename = file_info['name']
         mtime = file_info.get('mtime', 0)
         size = file_info.get('bytes', 0)
+        existing_record = db_files_map.get(filename, {})
 
         should_update = False
         if filename not in db_files_map:
             should_update = True
         else:
-            db_record = db_files_map[filename]
-            if abs(db_record['mtime'] - mtime) > 0.001 or db_record['bytes'] != size:
+            if abs(existing_record.get('mtime', 0) - mtime) > 0.001 or existing_record.get('bytes', 0) != size:
                 should_update = True
 
+        full_path = path.join(parent_path, normalized_folder_path, filename) if normalized_folder_path else path.join(parent_path, filename)
+
+        tags_from_disk: list[str] = []
+        info_file_path = get_info_filename(full_path)
+        if path.exists(info_file_path):
+            try:
+                with open(info_file_path, 'r', encoding='utf-8') as f:
+                    info_data = json.load(f)
+                    tags_from_disk = info_data.get("tags", [])
+            except Exception:
+                pass
+
+        tags_to_save = tags_from_disk if tags_from_disk else None
+        merged_tags = tags_from_disk if tags_from_disk else existing_record.get('tags', [])
+
+        hash_val = f"{full_path}{file_info['created_at']}{size}"
+        metadata_for_response = existing_record.get('formatted_info', {})
+        metadata_pending = existing_record.get('metadata_pending', False)
+
         if should_update:
-            full_path = path.join(parent_path, normalized_folder_path, filename) if normalized_folder_path else path.join(parent_path, filename)
-            metadata = extract_detailed_metadata(full_path)
-
-            tags_from_disk = []
-            info_file_path = get_info_filename(full_path)
-            if path.exists(info_file_path):
-                try:
-                    with open(info_file_path, 'r', encoding='utf-8') as f:
-                        info_data = json.load(f)
-                        tags_from_disk = info_data.get("tags", [])
-                except Exception:
-                    pass
-
-            hash_val = f"{full_path}{file_info['created_at']}{size}"
-            tags_to_save = tags_from_disk if tags_from_disk else None
-
-            db_service.upsert_file(
+            metadata_pending = True
+            database.upsert_file(
                 filename=filename,
                 folder_path=normalized_folder_path,
                 folder_type=folder_type,
@@ -104,11 +120,22 @@ def synchronize_folder(folder_path: str, folder_type: str):
                 created_at=file_info['created_at'],
                 mtime=mtime,
                 hash_val=hash_val,
-                formatted_info=metadata,
+                formatted_info=metadata_for_response,
                 tags=tags_to_save
             )
 
-            current_tags = tags_to_save if tags_to_save is not None else db_files_map.get(filename, {}).get('tags', [])
+            if metadata_queue:
+                metadata_queue.enqueue(MetadataIndexTask(
+                    filename=filename,
+                    folder_path=normalized_folder_path,
+                    folder_type=folder_type,
+                    file_path=full_path,
+                    bytes_size=size,
+                    created_at=file_info['created_at'],
+                    mtime=mtime,
+                    hash_val=hash_val,
+                    tags=merged_tags
+                ))
 
             db_files_map[filename] = {
                 'filename': filename,
@@ -118,8 +145,9 @@ def synchronize_folder(folder_path: str, folder_type: str):
                 'created_at': file_info['created_at'],
                 'mtime': mtime,
                 'hash': hash_val,
-                'formatted_info': metadata,
-                'tags': current_tags
+                'formatted_info': metadata_for_response,
+                'tags': merged_tags,
+                'metadata_pending': metadata_pending
             }
 
     # 检查已删除文件
@@ -146,7 +174,8 @@ def synchronize_folder(folder_path: str, folder_type: str):
             file_info.update({
                 'hash': db_record.get('hash'),
                 'formatted_info': db_record.get('formatted_info'),
-                'tags': db_record.get('tags')
+                'tags': db_record.get('tags'),
+                'metadata_pending': db_record.get('metadata_pending', False)
             })
         response_files.append(file_info)
 

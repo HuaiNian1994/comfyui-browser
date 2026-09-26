@@ -10,6 +10,7 @@ from ..utils import get_target_folder_files, get_parent_path, get_info_filename,
 from ..constants import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from ..services.db_service import DBService
 from ..services.metadata_indexer import MetadataIndexQueue, MetadataIndexTask
+from ..metadata.registry import PARSER_VERSION
 
 db_service = DBService()
 metadata_index_queue = MetadataIndexQueue(db_service, extract_detailed_metadata)
@@ -53,6 +54,29 @@ def update_file_info(file_path, notes=None, tags=None):
         print(f"Error writing info file {info_file_path}: {e}")
 
 
+def create_metadata_task(record, full_path, folder_path, folder_type):
+    """任务保存精确文件版本，后台写入同时核验记录身份。"""
+    stat = os.stat(full_path)
+    return MetadataIndexTask(
+        filename=record['filename'], folder_path=folder_path, folder_type=folder_type,
+        file_path=full_path, bytes_size=record['bytes'], created_at=record['created_at'],
+        mtime=record['mtime'], mtime_ns=stat.st_mtime_ns, hash_val=record['hash'],
+        record_id=record.get('id'),
+    )
+
+
+def schedule_file_metadata(record, full_path, folder_path, folder_type, queue, force=False):
+    """版本过期自动补齐；已失败的同版本任务由用户刷新重试。"""
+    if path.splitext(record['filename'])[1].lower() not in IMAGE_EXTENSIONS:
+        return 'complete'
+    task = create_metadata_task(record, full_path, folder_path, folder_type)
+    info = record.get('formatted_info') or {}
+    outdated = info.get('parser_version') != PARSER_VERSION
+    if queue and (force or outdated):
+        queue.enqueue(task, force=force)
+    return (queue.status(task) if queue else None) or info.get('index_status', 'waiting' if outdated else 'complete')
+
+
 def synchronize_folder(
     folder_path: str,
     folder_type: str,
@@ -60,126 +84,51 @@ def synchronize_folder(
     metadata_queue: MetadataIndexQueue = metadata_index_queue,
     database: DBService = db_service
 ):
-    """
-    同步指定目录的磁盘文件与数据库记录，返回带有元数据的文件列表。
-    """
-    normalized_folder_path = normalize_folder_path(folder_path)
-    disk_files = get_target_folder_files(normalized_folder_path, folder_type=folder_type)
-
+    """快速同步文件身份，图片属性由后台队列按解析版本补齐。"""
+    normalized = normalize_folder_path(folder_path)
+    disk_files = get_target_folder_files(normalized, folder_type=folder_type)
     if disk_files is None:
         return []
-
-    db_files_map = database.get_files_in_folder(normalized_folder_path, folder_type)
-    disk_files_map = {f['name']: f for f in disk_files}
-    parent_path = get_parent_path(folder_type)
-    inline_remaining = max(0, metadata_limit)
-
-    # 检查新增或修改文件
-    for file_info in disk_files:
-        if file_info['type'] == 'dir':
+    records = database.get_files_in_folder(normalized, folder_type)
+    parent = get_parent_path(folder_type)
+    disk_names = {item['name'] for item in disk_files}
+    removed = [name for name in records if name not in disk_names]
+    if removed:
+        database.delete_files(normalized, folder_type, removed)
+    for item in disk_files:
+        if item['type'] == 'dir':
             continue
-
-        filename = file_info['name']
-        mtime = file_info.get('mtime', 0)
-        size = file_info.get('bytes', 0)
-        existing_record = db_files_map.get(filename, {})
-
-        should_update = False
-        if filename not in db_files_map:
-            should_update = True
-        else:
-            if abs(existing_record.get('mtime', 0) - mtime) > 0.001 or existing_record.get('bytes', 0) != size:
-                should_update = True
-
-        full_path = path.join(parent_path, normalized_folder_path, filename) if normalized_folder_path else path.join(parent_path, filename)
-
-        tags_from_disk: list[str] = []
-        info_file_path = get_info_filename(full_path)
-        if path.exists(info_file_path):
-            try:
-                with open(info_file_path, 'r', encoding='utf-8') as f:
-                    info_data = json.load(f)
-                    tags_from_disk = info_data.get("tags", [])
-            except Exception:
-                pass
-
-        tags_to_save = tags_from_disk if tags_from_disk else None
-        merged_tags = tags_from_disk if tags_from_disk else existing_record.get('tags', [])
-
-        hash_val = f"{full_path}{file_info['created_at']}{size}"
-        metadata_for_response = existing_record.get('formatted_info', {})
-        metadata_pending = existing_record.get('metadata_pending', False)
-
-        if should_update:
-            metadata_pending = True
+        record = records.get(item['name'])
+        changed = not record or record.get('mtime') != item.get('mtime') or record.get('bytes') != item.get('bytes')
+        if changed:
+            full_path = path.join(parent, normalized, item['name'])
+            tags = None
+            sidecar = get_info_filename(full_path)
+            if path.exists(sidecar):
+                try:
+                    with open(sidecar, encoding='utf-8') as stream:
+                        tags = json.load(stream).get('tags')
+                except (OSError, ValueError):
+                    pass
             database.upsert_file(
-                filename=filename,
-                folder_path=normalized_folder_path,
-                folder_type=folder_type,
-                bytes_size=size,
-                created_at=file_info['created_at'],
-                mtime=mtime,
-                hash_val=hash_val,
-                formatted_info=metadata_for_response,
-                tags=tags_to_save
+                filename=item['name'], folder_path=normalized, folder_type=folder_type,
+                bytes_size=item['bytes'], created_at=item['created_at'], mtime=item['mtime'],
+                hash_val=f"{full_path}{item['mtime']}{item['bytes']}", formatted_info={}, tags=tags,
             )
-
-            if metadata_queue:
-                metadata_queue.enqueue(MetadataIndexTask(
-                    filename=filename,
-                    folder_path=normalized_folder_path,
-                    folder_type=folder_type,
-                    file_path=full_path,
-                    bytes_size=size,
-                    created_at=file_info['created_at'],
-                    mtime=mtime,
-                    hash_val=hash_val,
-                    tags=merged_tags
-                ))
-
-            db_files_map[filename] = {
-                'filename': filename,
-                'folder_path': normalized_folder_path,
-                'folder_type': folder_type,
-                'bytes': size,
-                'created_at': file_info['created_at'],
-                'mtime': mtime,
-                'hash': hash_val,
-                'formatted_info': metadata_for_response,
-                'tags': merged_tags,
-                'metadata_pending': metadata_pending
-            }
-
-    # 检查已删除文件
-    to_delete = []
-    for db_filename in db_files_map:
-        if db_filename not in disk_files_map:
-            to_delete.append(db_filename)
-
-    if to_delete:
-        db_service.delete_files(normalized_folder_path, folder_type, to_delete)
-        for f in to_delete:
-            del db_files_map[f]
-
-    # 合并结果
-    response_files = []
-    for file_info in disk_files:
-        if file_info['type'] == 'dir':
-            response_files.append(file_info)
+    records = database.get_files_in_folder(normalized, folder_type)
+    for item in disk_files:
+        if item['type'] == 'dir':
             continue
-
-        filename = file_info['name']
-        if filename in db_files_map:
-            db_record = db_files_map[filename]
-            file_info.update({
-                'hash': db_record.get('hash'),
-                'formatted_info': db_record.get('formatted_info'),
-                'tags': db_record.get('tags'),
-                'metadata_pending': db_record.get('metadata_pending', False)
-            })
-        response_files.append(file_info)
-
-    return response_files
+        record = records.get(item['name'])
+        if not record:
+            continue
+        try:
+            status = schedule_file_metadata(record, path.join(parent, normalized, item['name']), normalized, folder_type, metadata_queue)
+        except OSError:
+            status = 'failed'
+        item.update(hash=record.get('hash'), formatted_info=record.get('formatted_info'),
+                    tags=record.get('tags', []), metadata_pending=status in {'waiting', 'processing'})
+    return disk_files
 
 
 # folder_path, folder_type
@@ -464,47 +413,62 @@ async def api_view_file(request):
 
 # filename, folder_path, folder_type
 async def api_get_image_metadata(request):
-    """获取图片元数据(ComfyUI workflow和prompt，以及模型、LoRA、标签等详细信息)"""
-    folder_type = request.query.get("folder_type", "outputs")
-    folder_path = request.query.get("folder_path", "")
-    filename = request.query.get("filename", None)
-    
+    """返回缓存与任务状态；初次读取补齐版本，poll 请求仅读取。"""
+    folder_type = request.query.get('folder_type', 'outputs')
+    folder_path = normalize_folder_path(request.query.get('folder_path', ''))
+    filename = request.query.get('filename')
     if not filename:
-        return web.Response(status=400, text="filename is required")
-
-    # 从数据库获取信息
-    db_files_map = db_service.get_files_in_folder(folder_path, folder_type)
-    db_record = db_files_map.get(filename)
-
-    if not db_record:
-        # 如果数据库中没有记录，返回 404
-        return web.Response(status=404, text="File metadata not found in database. Ensure file exists and directory has been synchronized.")
-    
-    # 检查是否为图片文件（根据文件扩展名，DB中可能存储了非图片文件的记录，但它们不应有图片元数据）
-    file_extension = path.splitext(filename)[1].lower()
-    if file_extension not in IMAGE_EXTENSIONS:
-        return web.json_response({
-            "positive": "",
-            "negative": "",
-            "has_metadata": False,
-            "formatted_info": {},
-            "tags": db_record.get("tags", []) # 非图片文件也可能有标签
-        })
-
-    # 从数据库记录中提取并返回所有详细元数据
-    formatted_info = db_record.get("formatted_info", {})
-    tags = db_record.get("tags", [])
-    
-    # 构建符合前端期望的响应结构
-    response_data = {
-        "positive": formatted_info.get("positive_prompt", ""),
-        "negative": formatted_info.get("negative_prompt", ""),
-        "has_metadata": bool(formatted_info), # 如果 formatted_info 不为空，则认为有元数据
-        "formatted_info": formatted_info,
-        "tags": tags
-    }
-
-    return web.json_response(response_data)
+        return web.Response(status=400, text='filename is required')
+    if path.basename(filename) != filename or '/' in filename or '\\' in filename:
+        return web.Response(status=400, text='Invalid filename')
+    record = db_service.get_files_in_folder(folder_path, folder_type).get(filename)
+    if not record:
+        return web.Response(status=404, text='File not found in synchronized directory')
+    base = path.realpath(get_parent_path(folder_type))
+    full_path = path.realpath(path.join(base, folder_path, filename))
+    if path.commonpath([base, full_path]) != base:
+        return web.Response(status=400, text='Invalid path')
+    if path.splitext(filename)[1].lower() not in IMAGE_EXTENSIONS:
+        return web.json_response({'positive': '', 'negative': '', 'has_metadata': False,
+                                  'formatted_info': {}, 'tags': record.get('tags', []), 'index_status': 'complete'})
+    try:
+        stat = os.stat(full_path)
+        if request.query.get('poll') == '1':
+            task = create_metadata_task(record, full_path, folder_path, folder_type)
+            info = record.get('formatted_info') or {}
+            status = metadata_index_queue.status(task) or info.get('index_status')
+            if stat.st_mtime != record['mtime'] or stat.st_size != record['bytes'] or not status:
+                status = 'failed'
+            latest = db_service.get_files_in_folder(folder_path, folder_type).get(filename)
+            if not latest:
+                return web.Response(status=404, text='File no longer exists')
+            info = latest.get('formatted_info') or {}
+            return web.json_response({
+                'positive': info.get('positive_prompt', ''), 'negative': info.get('negative_prompt', ''),
+                'has_metadata': info.get('has_metadata', False), 'formatted_info': info,
+                'tags': latest.get('tags', []), 'index_status': status,
+                'metadata_pending': status in {'waiting', 'processing'},
+            })
+        if stat.st_mtime != record['mtime'] or stat.st_size != record['bytes']:
+            db_service.upsert_file(filename, folder_path, folder_type, stat.st_size, stat.st_ctime,
+                                   stat.st_mtime, f"{full_path}{stat.st_mtime}{stat.st_size}", {}, None)
+            record = db_service.get_files_in_folder(folder_path, folder_type)[filename]
+        task = create_metadata_task(record, full_path, folder_path, folder_type)
+        status = schedule_file_metadata(record, full_path, folder_path, folder_type, metadata_index_queue,
+                                        force=request.query.get('refresh') == '1')
+        # complete 状态在提交之后发布，随后读取可见的最新数据。
+        record = db_service.get_files_in_folder(folder_path, folder_type).get(filename)
+        if not record:
+            return web.Response(status=404, text='File no longer exists')
+    except FileNotFoundError:
+        return web.Response(status=404, text='File no longer exists')
+    info = record.get('formatted_info') or {}
+    return web.json_response({
+        'positive': info.get('positive_prompt', ''), 'negative': info.get('negative_prompt', ''),
+        'has_metadata': info.get('has_metadata', False), 'formatted_info': info,
+        'tags': record.get('tags', []), 'index_status': status,
+        'metadata_pending': status in {'waiting', 'processing'},
+    })
 
 
 # All tags

@@ -143,6 +143,18 @@ class DBService:
         conn.commit()
         conn.close()
 
+    def update_metadata_if_current(self, task, formatted_info: Dict[str, Any]) -> bool:
+        """只更新任务仍对应的文件元数据；保留用户字段，删除的记录保持删除。"""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """UPDATE files SET formatted_info=?
+                WHERE filename=? AND folder_path=? AND folder_type=?
+                AND mtime=? AND bytes=? AND hash=? AND (? IS NULL OR id=?)""",
+                (json.dumps(formatted_info), task.filename, task.folder_path, task.folder_type,
+                 task.mtime, task.bytes_size, task.hash_val, task.record_id, task.record_id),
+            )
+            return cursor.rowcount == 1
+
     def update_file_tags(self, filename: str, folder_path: str, folder_type: str, tags: List[str]):
         conn = self._get_connection()
         cursor = conn.cursor()

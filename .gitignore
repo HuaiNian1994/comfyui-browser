@@ -4,3 +4,4 @@ __pycache__/
 download_logs/
 web-ui/release/
 *.md
+!docs/METADATA_SUPPORT.md

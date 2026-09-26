@@ -1,101 +1,66 @@
-import importlib.util
+import json
+import struct
+import tempfile
 import unittest
+import zlib
 from pathlib import Path
-from typing import Any, Dict
+from PIL import Image
+from PIL.PngImagePlugin import PngInfo
+from module_loader import load_module
+from test_execution_graph import basic_graph
 
+extract = load_module('utils.image_utils').extract_detailed_metadata
 
-IMAGE_UTILS_PATH = Path(__file__).resolve().parents[1] / "utils" / "image_utils.py"
+class ImageMetadataTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.path = Path(self.directory.name)
 
+    def test_png_values_and_dimensions(self):
+        meta = PngInfo(); meta.add_text('prompt', json.dumps(basic_graph()))
+        file = self.path / 'test.png'
+        Image.new('RGB', (48, 32)).save(file, pnginfo=meta)
+        info = extract(str(file))
+        self.assertEqual((info['width'], info['height']), (48, 32))
+        self.assertTrue(info['has_metadata'])
+        self.assertEqual(info['models'], ['base.safetensors'])
 
-def load_image_utils_module():
-    """直接加载 image_utils.py，避免执行 utils 包入口。"""
-    spec = importlib.util.spec_from_file_location("image_utils_under_test", IMAGE_UTILS_PATH)
-    image_utils_module = importlib.util.module_from_spec(spec)
-    assert spec is not None and spec.loader is not None
-    spec.loader.exec_module(image_utils_module)
-    return image_utils_module
+    def test_apng_comf_chunk_after_image_data(self):
+        file = self.path / 'test.png'
+        Image.new('RGB', (48, 32)).save(file)
+        raw = file.read_bytes()
+        payload = b'prompt\0' + json.dumps(basic_graph()).encode('latin-1')
+        chunk = struct.pack('>I', len(payload)) + b'comf' + payload + struct.pack('>I', zlib.crc32(b'comf'+payload))
+        file.write_bytes(raw[:-12] + chunk + raw[-12:])
+        self.assertTrue(extract(str(file))['has_metadata'])
 
+    def test_webp_exif(self):
+        file = self.path / 'test.webp'
+        image = Image.new('RGB', (48, 32)); exif = image.getexif()
+        exif[0x0110] = 'prompt:' + json.dumps(basic_graph())
+        image.save(file, exif=exif)
+        self.assertTrue(extract(str(file))['has_metadata'])
 
-class PositiveAndNegativePromptParseTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls) -> None:
-        image_utils_module = load_image_utils_module()
-        cls.parse_positive_and_negative_prompts = staticmethod(
-            image_utils_module._parse_positive_and_negative_prompts
-        )
+    def test_missing_and_workflow_only(self):
+        for workflow in (False, True):
+            meta = PngInfo()
+            if workflow: meta.add_text('workflow', '{}')
+            file = self.path / 'empty.png'
+            Image.new('RGB', (48, 32)).save(file, pnginfo=meta)
+            info = extract(str(file))
+            self.assertEqual(info['parse_status'], 'missing')
+            self.assertFalse(info['has_metadata'])
+            self.assertEqual(info['width'], 48)
 
-    def test_krea2_positive_ignores_earlier_clip_text_encode(self) -> None:
-        prompt_json: Dict[str, Any] = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "earlier clip prompt"},
-            },
-            "5": {
-                "class_type": "TextEncodeKrea2",
-                "inputs": {
-                    "prompt": "Photo of a man,猎魔人",
-                    "system_prompt": "do not use this system prompt",
-                },
-            },
-            "6": {
-                "class_type": "ConditioningZeroOut",
-                "inputs": {"conditioning": ["5", 0]},
-            },
-            "10": {
-                "class_type": "KSampler",
-                "inputs": {
-                    "positive": ["5", 0],
-                    "negative": ["6", 0],
-                },
-            },
-        }
+    def test_invalid_graph_preserves_dimensions(self):
+        meta = PngInfo(); meta.add_text('prompt', '{broken')
+        file = self.path / 'broken.png'
+        Image.new('RGB', (48, 32)).save(file, pnginfo=meta)
+        info = extract(str(file))
+        self.assertEqual(info['parse_status'], 'invalid')
+        self.assertEqual(info['height'], 32)
 
-        positive_prompt, negative_prompt = self.parse_positive_and_negative_prompts(prompt_json)
-
-        self.assertEqual(positive_prompt, "Photo of a man,猎魔人")
-        self.assertEqual(negative_prompt, "")
-
-    def test_sampler_links_override_json_order(self) -> None:
-        prompt_json: Dict[str, Any] = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "json order first"},
-            },
-            "2": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "json order second"},
-            },
-            "10": {
-                "class_type": "KSampler",
-                "inputs": {
-                    "positive": ["2", 0],
-                    "negative": ["1", 0],
-                },
-            },
-        }
-
-        positive_prompt, negative_prompt = self.parse_positive_and_negative_prompts(prompt_json)
-
-        self.assertEqual(positive_prompt, "json order second")
-        self.assertEqual(negative_prompt, "json order first")
-
-    def test_encoder_order_when_no_sampler(self) -> None:
-        prompt_json: Dict[str, Any] = {
-            "3": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "first encoder"},
-            },
-            "8": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "second encoder"},
-            },
-        }
-
-        positive_prompt, negative_prompt = self.parse_positive_and_negative_prompts(prompt_json)
-
-        self.assertEqual(positive_prompt, "first encoder")
-        self.assertEqual(negative_prompt, "second encoder")
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_other_container_basic_information(self):
+        file = self.path / 'test.jpg'; Image.new('RGB', (48, 32)).save(file)
+        self.assertEqual(extract(str(file))['parse_status'], 'unsupported_container')

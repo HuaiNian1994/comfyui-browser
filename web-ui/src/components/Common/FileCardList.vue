@@ -284,8 +284,9 @@ import {
   ElEmpty
 } from 'element-plus'
 import type { FileInfo, FolderType } from '@/types'
-import ImagePreviewDialog from './ImagePreviewDialog.vue'
-import { addFileTag, removeFileTag, fetchAllTags, fetchImageMetadata, reindexFiles } from '@/api/files'
+import { subscribeMetadata } from '@/api/metadata-subscription'
+import ImagePreviewDialog from './ImagePreviewDialog/ImagePreviewDialog.vue'
+import { addFileTag, removeFileTag, fetchAllTags, reindexFiles } from '@/api/files'
 
 export default defineComponent({
   name: 'FileCardList',
@@ -456,8 +457,7 @@ export default defineComponent({
       viewMode: 'grid' as 'grid' | 'list',
       selectedSearchDimensions: [] as string[],
       isReindexing: false,
-      metadataFetchQueue: [] as FileInfo[],
-      isFetchingMetadata: false
+      metadataSubscriptions: [] as Array<() => void>
     }
   },
   computed: {
@@ -551,7 +551,16 @@ export default defineComponent({
       return !!this.$slots['batch-actions']
     }
   },
+  mounted() {
+    this.scheduleMetadataWarmup()
+  },
+  beforeUnmount() {
+    this.metadataSubscriptions.forEach(unsubscribe => unsubscribe())
+  },
   watch: {
+    paginatedFiles() {
+      this.scheduleMetadataWarmup()
+    },
     files() {
       this.handleFilesChange()
       // 文件列表变化时，清理不在列表中的选中项
@@ -583,53 +592,17 @@ export default defineComponent({
      * 将缺失图片元数据的文件加入队列，分批异步补齐，避免首屏卡顿。
      */
     scheduleMetadataWarmup() {
-      const pendingMap = new Map<string, FileInfo>()
-      this.files.forEach((file) => {
-        if (file.fileType !== 'image') {
-          return
-        }
-        const isMetadataMissing = !file.formatted_info || file.metadata_pending
-        if (!isMetadataMissing) {
-          return
-        }
-        pendingMap.set(this.getFileKey(file), file)
+      this.metadataSubscriptions.forEach(unsubscribe => unsubscribe())
+      this.metadataSubscriptions = []
+      this.paginatedFiles.forEach(file => {
+        if (file.fileType !== 'image' || (file.formatted_info?.parser_version && !file.metadata_pending)) return
+        const folderPath = file.folder_path ?? this.folderPath ?? ''
+        this.metadataSubscriptions.push(subscribeMetadata(this.folderType as FolderType, file.name, folderPath, metadata => {
+          if (metadata.formatted_info) file.formatted_info = metadata.formatted_info
+          if (metadata.tags) file.tags = metadata.tags
+          file.metadata_pending = metadata.metadata_pending ?? false
+        }))
       })
-      this.metadataFetchQueue = Array.from(pendingMap.values())
-      this.processMetadataQueue()
-    },
-    async processMetadataQueue() {
-      if (this.isFetchingMetadata || this.metadataFetchQueue.length === 0) {
-        return
-      }
-      this.isFetchingMetadata = true
-      const batchSize = 5
-      while (this.metadataFetchQueue.length > 0) {
-        const currentBatch = this.metadataFetchQueue.splice(0, batchSize)
-        await Promise.all(currentBatch.map((file) => this.fetchMetadataForFile(file)))
-        await this.waitForDelay(150)
-      }
-      this.isFetchingMetadata = false
-    },
-    async fetchMetadataForFile(file: FileInfo) {
-      if (file.fileType !== 'image') {
-        return
-      }
-      try {
-        const folderPath = file.folder_path || this.folderPath
-        const metadata = await fetchImageMetadata(this.folderType as FolderType, file.name, folderPath || undefined)
-        if (metadata?.formatted_info) {
-          file.formatted_info = metadata.formatted_info
-        }
-        if (metadata?.tags) {
-          file.tags = metadata.tags
-        }
-        file.metadata_pending = false
-      } catch (error) {
-        console.error('Failed to fetch metadata for file', file.name, error)
-      }
-    },
-    waitForDelay(duration: number) {
-      return new Promise((resolve) => setTimeout(resolve, duration))
     },
     getFileKey(file: FileInfo): string {
       if (file.hash) {

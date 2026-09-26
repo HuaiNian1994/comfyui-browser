@@ -12,6 +12,16 @@ export type FileType = 'image' | 'video' | 'json' | 'dir' | 'html'
  * 格式化后的详细信息
  */
 export interface FormattedInfo {
+  parser_version?: number
+  parse_status?: 'complete' | 'partial' | 'missing' | 'invalid' | 'unsupported_container'
+  index_status?: 'complete' | 'failed'
+  has_metadata?: boolean
+  image_format?: string
+  error_code?: string
+  branches?: MetadataBranch[]
+  stages?: MetadataStage[]
+  unassigned?: MetadataProperty[]
+  diagnostics?: MetadataDiagnostic[]
   models?: string[]
   loras?: string[]
   width?: number
@@ -103,9 +113,52 @@ export interface BrowserConfig {
  * 图片元数据接口
  */
 export interface ImageMetadata {
+  index_status?: 'waiting' | 'processing' | 'complete' | 'failed'
+  metadata_pending?: boolean
   positive: string
   negative: string
   has_metadata: boolean
   formatted_info?: FormattedInfo
   tags?: string[]
+}
+
+export interface MetadataSource {
+  node_id: string
+  class_type: string
+  field: string
+  output_port?: number
+}
+
+export interface MetadataProperty {
+  id: string
+  group: string
+  value: unknown
+  state: 'recorded' | 'derived' | 'unknown'
+  sources: MetadataSource[]
+  channel?: string
+  reason?: string
+}
+
+export interface MetadataDiagnostic {
+  code: string
+  node_id: string
+  class_type: string
+  field: string
+  detail: string
+}
+
+export interface MetadataStage {
+  id: string
+  node_id: string
+  class_type: string
+  kind: 'sampling' | 'processing'
+  properties: MetadataProperty[]
+  depends_on: string[]
+}
+
+export interface MetadataBranch {
+  id: string
+  output_node_id: string | null
+  association: 'unique' | 'unconfirmed'
+  stage_ids: string[]
 }

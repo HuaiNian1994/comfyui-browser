@@ -83,7 +83,8 @@ export const viewFile = async (
 export const fetchImageMetadata = async (
   folderType: FolderType,
   filename: string,
-  folderPath?: string
+  folderPath?: string,
+  options: { poll?: boolean; refresh?: boolean; signal?: AbortSignal } = {}
 ): Promise<ImageMetadata> => {
   const params: Record<string, string> = {
     folder_type: folderType,
@@ -93,7 +94,9 @@ export const fetchImageMetadata = async (
     params.folder_path = folderPath
   }
 
-  const response = await apiClient.get<ImageMetadata>('/files/metadata', { params })
+  if (options.poll) params.poll = '1'
+  if (options.refresh) params.refresh = '1'
+  const response = await apiClient.get<ImageMetadata>('/files/metadata', { params, signal: options.signal })
   return response.data
 }
 

@@ -28,7 +28,7 @@ apiClient.interceptors.response.use(
     return response
   },
   (error) => {
-    console.error('响应错误:', error)
+    if (!axios.isCancel(error)) console.error('响应错误:', error)
     return Promise.reject(error)
   }
 )

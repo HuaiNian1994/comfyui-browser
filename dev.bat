@@ -15,8 +15,8 @@ for /f "usebackq tokens=1* delims==" %%a in (".devConfig") do (
     set "!key!=!val!"
 )
 
-echo Starting ComfyUI Backend...
-start "" "!COMFYUI_INSTALL_PATH!\ComfyUI.exe" --enable-cors-header
+@REM echo Starting ComfyUI Backend...
+@REM start "" "!COMFYUI_INSTALL_PATH!\ComfyUI.exe" --enable-cors-header
 
 echo Starting Frontend...
 cd /d "!COMFYUI_RUNTIME_PATH!\custom_nodes\comfyui-browser\web-ui"

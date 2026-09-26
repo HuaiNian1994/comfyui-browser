@@ -1,7 +1,7 @@
 """图片处理工具"""
 import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict, Optional
 
 try:
     from PIL import Image
@@ -28,10 +28,10 @@ def extract_comfyui_png_metadata(image_path: str) -> Dict[str, Any]:
         
         if prompt:
             prompt_data = json.loads(prompt)
-            positive, negative = _parse_clip_text_encode(prompt_data)
+            positive_prompt, negative_prompt = _parse_positive_and_negative_prompts(prompt_data)
             return {
-                "positive": positive,
-                "negative": negative,
+                "positive": positive_prompt,
+                "negative": negative_prompt,
                 "has_metadata": True
             }
         
@@ -41,43 +41,83 @@ def extract_comfyui_png_metadata(image_path: str) -> Dict[str, Any]:
         return {"positive": "", "negative": "", "has_metadata": False}
 
 
-def _parse_clip_text_encode(prompt_json: Dict[str, Any]) -> tuple[str, str]:
-    """
-    从prompt JSON中提取正向和反向提示词
-    
-    ComfyUI的prompt格式:
-    {
-        "node_id": {
-            "class_type": "CLIPTextEncode",
-            "inputs": {
-                "text": "提示词内容"
-            }
-        }
-    }
-    
-    Args:
-        prompt_json: ComfyUI的prompt JSON数据
-        
-    Returns:
-        (positive_text, negative_text) 元组
-    """
-    positive_text = ""
-    negative_text = ""
-    
-    # 收集所有CLIPTextEncode节点
-    clip_text_nodes = []
-    for node_id, node_data in prompt_json.items():
-        if node_data.get("class_type") == "CLIPTextEncode":
-            text = node_data.get("inputs", {}).get("text", "")
-            clip_text_nodes.append((node_id, text))
-    
-    # 通常第一个是positive,第二个是negative
-    if len(clip_text_nodes) >= 1:
-        positive_text = clip_text_nodes[0][1]
-    if len(clip_text_nodes) >= 2:
-        negative_text = clip_text_nodes[1][1]
-    
-    return positive_text, negative_text
+_PROMPT_INPUT_NAME_BY_ENCODER_CLASS: Dict[str, str] = {
+    "CLIPTextEncode": "text",
+    "TextEncodeKrea2": "prompt",
+}
+
+_SAMPLER_CLASS_TYPES_WITH_CONDITIONING = {
+    "KSampler",
+    "KSamplerAdvanced",
+    "SamplerCustom",
+}
+
+
+def _prompt_string_from_encoder_node(node_data: Any) -> Optional[str]:
+    """已知文本节点且提示词字段是字符串时返回该字符串，否则返回 None。"""
+    if not isinstance(node_data, dict):
+        return None
+    prompt_input_name = _PROMPT_INPUT_NAME_BY_ENCODER_CLASS.get(node_data.get("class_type"))
+    if prompt_input_name is None:
+        return None
+    node_inputs = node_data.get("inputs")
+    if not isinstance(node_inputs, dict):
+        return None
+    prompt_value = node_inputs.get(prompt_input_name)
+    if not isinstance(prompt_value, str):
+        return None
+    return prompt_value
+
+
+def _resolved_prompt_from_conditioning_link(prompt_json: Dict[str, Any], conditioning_link: Any) -> Optional[str]:
+    """连线直接指向文本节点且字段为字符串时返回提示词。连线或非文本节点返回 None。"""
+    if not isinstance(conditioning_link, (list, tuple)) or len(conditioning_link) < 2:
+        return None
+    linked_node = prompt_json.get(str(conditioning_link[0]))
+    return _prompt_string_from_encoder_node(linked_node)
+
+
+def _positive_and_negative_from_first_resolved_sampler(prompt_json: Dict[str, Any]) -> Optional[tuple[str, str]]:
+    """按对象顺序取第一个至少一侧解析成功的采样器。都没有则返回 None。"""
+    for node_data in prompt_json.values():
+        if not isinstance(node_data, dict):
+            continue
+        if node_data.get("class_type") not in _SAMPLER_CLASS_TYPES_WITH_CONDITIONING:
+            continue
+        node_inputs = node_data.get("inputs")
+        if not isinstance(node_inputs, dict):
+            continue
+        positive_prompt = _resolved_prompt_from_conditioning_link(prompt_json, node_inputs.get("positive"))
+        negative_prompt = _resolved_prompt_from_conditioning_link(prompt_json, node_inputs.get("negative"))
+        if positive_prompt is None and negative_prompt is None:
+            continue
+        return positive_prompt or "", negative_prompt or ""
+    return None
+
+
+def _positive_and_negative_from_encoder_order(prompt_json: Dict[str, Any]) -> tuple[str, str]:
+    """按对象顺序取前两个文本节点，分别作为正向和反向。"""
+    prompt_strings: list[str] = []
+    for node_data in prompt_json.values():
+        prompt_string = _prompt_string_from_encoder_node(node_data)
+        if prompt_string is None:
+            continue
+        prompt_strings.append(prompt_string)
+        if len(prompt_strings) == 2:
+            break
+    positive_prompt = prompt_strings[0] if prompt_strings else ""
+    negative_prompt = prompt_strings[1] if len(prompt_strings) > 1 else ""
+    return positive_prompt, negative_prompt
+
+
+def _parse_positive_and_negative_prompts(prompt_json: Dict[str, Any]) -> tuple[str, str]:
+    """优先按采样器连线取正反向提示词；两侧都未解析到文本节点时按 JSON 顺序回退。"""
+    if not isinstance(prompt_json, dict):
+        return "", ""
+    prompts_from_sampler = _positive_and_negative_from_first_resolved_sampler(prompt_json)
+    if prompts_from_sampler is not None:
+        return prompts_from_sampler
+    return _positive_and_negative_from_encoder_order(prompt_json)
 
 def extract_detailed_metadata(image_path: str) -> Dict[str, Any]:
     """
@@ -110,9 +150,9 @@ def extract_detailed_metadata(image_path: str) -> Dict[str, Any]:
             prompt_data = json.loads(prompt)
             
             # Extract prompts
-            positive, negative = _parse_clip_text_encode(prompt_data)
-            info["positive_prompt"] = positive
-            info["negative_prompt"] = negative
+            positive_prompt, negative_prompt = _parse_positive_and_negative_prompts(prompt_data)
+            info["positive_prompt"] = positive_prompt
+            info["negative_prompt"] = negative_prompt
 
             # 遍历节点提取信息
             for node in prompt_data.values():

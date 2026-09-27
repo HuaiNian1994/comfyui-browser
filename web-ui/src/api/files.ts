@@ -85,7 +85,7 @@ export const fetchImageMetadata = async (
   folderType: FolderType,
   filename: string,
   folderPath?: string,
-  options: { poll?: boolean; refresh?: boolean; signal?: AbortSignal } = {}
+  options: { poll?: boolean; refresh?: boolean; signal?: AbortSignal; file_version?: string; index_generation?: number } = {}
 ): Promise<ImageMetadata> => {
   const params: Record<string, string> = {
     folder_type: folderType,
@@ -95,6 +95,8 @@ export const fetchImageMetadata = async (
     params.folder_path = folderPath
   }
 
+  if (options.file_version) params.file_version = options.file_version
+  if (options.index_generation !== undefined) params.index_generation = String(options.index_generation)
   if (options.poll) params.poll = '1'
   if (options.refresh) params.refresh = '1'
   const response = await apiClient.get<ImageMetadata>('/files/metadata', { params, signal: options.signal })
@@ -153,13 +155,6 @@ export const fetchAllTags = async (): Promise<string[]> => {
   return response.data.all_tags
 }
 
-export interface ReindexResponse {
-  folder_type: FolderType
-  folder_path?: string
-  indexed_folders: number
-  indexed_files: number
-}
-
 /**
  * 在系统文件管理器中打开指定目录
  */
@@ -169,16 +164,4 @@ export const openFolderOnSystem = async (folderType: FolderType, folderPath?: st
     data.folder_path = folderPath
   }
   await apiClient.post('/files/open-folder', data)
-}
-
-/**
- * 清空数据库索引并重新索引
- */
-export const reindexFiles = async (folderType: FolderType, folderPath?: string): Promise<ReindexResponse> => {
-  const data: Record<string, string> = { folder_type: folderType }
-  if (folderPath) {
-    data.folder_path = folderPath
-  }
-  const response = await apiClient.post<ReindexResponse>('/files/reindex', data)
-  return response.data
 }

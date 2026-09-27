@@ -1,4 +1,4 @@
-"""目录同步按文件数线性查询，并在工作线程执行阻塞操作。"""
+"""目录同步批量查询，并在工作线程执行阻塞操作。"""
 import ast
 import asyncio
 import os
@@ -20,19 +20,23 @@ def load_routes(namespace):
     # 隔离 ComfyUI 启动副作用，直接执行被测路由函数的原始 AST。
     tree = ast.parse((ROOT / 'routes/files.py').read_text(encoding='utf-8'))
     names = {'normalize_folder_path', 'create_metadata_task', 'schedule_file_metadata',
-             'synchronize_folder', 'api_get_files', 'api_get_image_metadata'}
+             'synchronize_folder', '_synchronize_folder_locked', 'api_get_files', 'api_get_image_metadata', 'request_services', 'summary_updates'}
     functions = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names]
     scope = {'asyncio': asyncio, 'os': os, 'path': os.path, 'DBService': DBService,
-             'INLINE_METADATA_SYNC_LIMIT': 0, 'metadata_index_queue': None, 'db_service': None,
+             'metadata_index_queue': None, 'db_service': None,
              'file_lock': storage.file_lock, 'PARSER_VERSION': PARSER_VERSION,
              'IMAGE_EXTENSIONS': {'.png'}, 'MetadataIndexTask': indexer.MetadataIndexTask,
-             'MetadataIndexQueue': indexer.MetadataIndexQueue, **namespace}
+             'MetadataIndexQueue': indexer.MetadataIndexQueue, 'resolve_folder_path': lambda *args: '.',
+             'resolve_file_path': lambda kind,folder,name: os.path.join(namespace.get('get_parent_path',lambda _:'.')(kind),folder,name),
+             'resolve_sidecar_path': lambda kind,folder,name: namespace.get('get_info_filename',lambda p:p+'.info')(os.path.join(namespace.get('get_parent_path',lambda _:'.')(kind),folder,name)),
+             'directory_scan_service': load_module('services.directory_service').DirectoryScanService(),
+             'directory_sync_lock': load_module('services.directory_service').directory_sync_lock, **namespace}
     exec(compile(ast.Module(body=functions, type_ignores=[]), str(ROOT / 'routes/files.py'), 'exec'), scope)
     return scope
 
 
 class DirectoryPerformanceTests(unittest.TestCase):
-    def test_large_folder_queries_full_metadata_twice_not_once_per_file(self):
+    def test_large_folder_queries_summary_twice_without_per_file_reads(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             db = DBService(str(root / 'test.db'))
@@ -52,16 +56,15 @@ class DirectoryPerformanceTests(unittest.TestCase):
                     patch.object(db, 'get_file', wraps=db.get_file) as file_reads:
                 result = routes['synchronize_folder']('', 'outputs', database=db)
             self.assertEqual(folder_reads.call_count, 2)
-            self.assertEqual(file_reads.call_count, 80)
-            self.assertTrue(all(call.kwargs['identity_only'] for call in file_reads.call_args_list))
+            self.assertEqual(file_reads.call_count, 0)
             self.assertEqual(len(result), 80)
+            self.assertTrue(all('formatted_info' not in item for item in result))
             self.assertEqual(result[0]['tags'], ['kept'])
-            self.assertNotIn('formatted_info', db.get_file('0.png', '', 'outputs', identity_only=True))
             self.assertIsNone(db.get_file('missing.png', '', 'outputs'))
 
     def test_routes_keep_blocking_work_off_event_loop(self):
         main_thread = threading.get_ident()
-        def scan(*args):
+        def scan(*args, **kwargs):
             self.assertNotEqual(threading.get_ident(), main_thread)
             return []
         def metadata(request):

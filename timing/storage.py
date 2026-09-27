@@ -21,9 +21,28 @@ pending_outputs = {}
 pending_lock = threading.Lock()
 
 
-def file_lock(path):
+def _file_lock_slot(path):
     key = os.path.normcase(os.path.realpath(path)).encode("utf-8")
-    return _locks[int.from_bytes(hashlib.sha256(key).digest()[:2], "big") % len(_locks)]
+    return int.from_bytes(hashlib.sha256(key).digest()[:2], "big") % len(_locks)
+
+
+def file_lock(path):
+    return _locks[_file_lock_slot(path)]
+
+
+@contextmanager
+def file_locks(paths):
+    """多文件操作按去重后的锁槽顺序获取，所有调用者保持同一锁顺序。"""
+    slots = sorted({_file_lock_slot(path) for path in paths})
+    acquired = []
+    try:
+        for slot in slots:
+            _locks[slot].acquire()
+            acquired.append(slot)
+        yield
+    finally:
+        for slot in reversed(acquired):
+            _locks[slot].release()
 
 
 class TimingStore:

@@ -41,12 +41,14 @@
             <el-slider v-model="cardScale" :min="0.5" :max="3" :step="0.1" :show-tooltip="false" />
           </div>
 
-          <el-button :loading="isReindexing" @click="handleReindex">
+          <el-button @click="$emit('refresh')">
             <el-icon>
               <Refresh />
             </el-icon>
             {{ t('common.btn.refresh') }}
           </el-button>
+
+          <el-button @click="handleReindex">后台重建索引</el-button>
 
           <!-- 视图切换 -->
           <el-button-group class="view-toggle">
@@ -124,7 +126,7 @@
         <div class="col-actions">Actions</div>
       </div>
 
-      <div v-for="file in paginatedFiles" :key="file.path || file.name" class="file-item"
+      <div v-for="file in paginatedFiles" :key="getFileKey(file)" class="file-item"
         :class="{ 'file-card': viewMode === 'grid', 'file-row': viewMode === 'list', 'is-selected': isSelected(file), 'is-management': isManagementMode }"
         @click="handleCardClick(file)">
         <!-- 选择遮罩 -->
@@ -135,7 +137,7 @@
         <!-- Grid View Content -->
         <template v-if="viewMode === 'grid'">
           <div class="file-preview">
-            <el-image v-if="file.fileType === 'image'" :src="file.previewUrl" fit="cover" class="preview-image" lazy />
+            <FileThumbnail v-if="file.fileType === 'image'" :file="file" :folder-type="folderType" :display-size="240 * cardScale" class="preview-image" @stale="$emit('stale', $event)" />
             <video v-else-if="file.fileType === 'video'" :src="file.previewUrl" class="preview-video" />
             <div v-else-if="file.fileType === 'dir'" class="preview-folder">
               <el-icon :size="48">
@@ -154,15 +156,15 @@
             <p class="file-name" :title="file.name">{{ file.name }}</p>
 
             <!-- 详细元数据展示 -->
-            <div v-if="file.formatted_info" class="file-details">
-              <el-tag v-if="file.formatted_info.width && file.formatted_info.height" size="small" type="info"
+            <div v-if="file.summary" class="file-details">
+              <el-tag v-if="file.summary.width && file.summary.height" size="small" type="info"
                 effect="plain" class="detail-tag">
-                {{ file.formatted_info.width }}x{{ file.formatted_info.height }}
+                {{ file.summary.width }}x{{ file.summary.height }}
               </el-tag>
-              <el-tooltip v-if="file.formatted_info.models && file.formatted_info.models.length > 0"
-                :content="file.formatted_info.models.join(', ')" placement="top">
+              <el-tooltip v-if="file.summary.models && file.summary.models.length > 0"
+                :content="file.summary.models.join(', ')" placement="top">
                 <el-tag size="small" type="success" effect="plain" class="detail-tag model-tag">
-                  {{ file.formatted_info.models[0] }}
+                  {{ file.summary.models[0] }}
                 </el-tag>
               </el-tooltip>
             </div>
@@ -176,7 +178,7 @@
                 @close="handleCloseTag(file, tag)">
                 {{ tag }}
               </el-tag>
-              <el-input v-if="inputVisibleMap[file.name]" ref="tagInputRef" v-model="inputValueMap[file.name]"
+              <el-input v-if="inputVisibleMap[getFileKey(file)]" ref="tagInputRef" v-model="inputValueMap[getFileKey(file)]"
                 class="input-new-tag" size="small" @keyup.enter="handleTagInputConfirm(file)"
                 @blur="handleTagInputConfirm(file)" />
               <el-button v-else class="button-new-tag" size="small" :icon="Plus"
@@ -195,8 +197,7 @@
         <!-- List View Content -->
         <template v-else>
           <div class="col-preview">
-            <el-image v-if="file.fileType === 'image'" :src="file.previewUrl" fit="cover" class="list-preview-img" lazy
-              :preview-src-list="[file.previewUrl || '']" :preview-teleported="true" @click.stop />
+            <FileThumbnail v-if="file.fileType === 'image'" :file="file" :folder-type="folderType" :display-size="64" class="list-preview-img" @stale="$emit('stale', $event)" @click.stop="handlePreviewClick(file)" />
             <video v-else-if="file.fileType === 'video'" :src="file.previewUrl" class="list-preview-video" />
             <el-icon v-else :size="32">
               <Folder v-if="file.fileType === 'dir'" />
@@ -205,17 +206,17 @@
           </div>
           <div class="col-name" :title="file.name">{{ file.name }}</div>
           <div class="col-info">
-            <div v-if="file.formatted_info?.models?.length" class="info-group">
+            <div v-if="file.summary?.models?.length" class="info-group">
               <span class="label">Models:</span>
-              <span class="value">{{ file.formatted_info.models.join(', ') }}</span>
+              <span class="value">{{ file.summary.models.join(', ') }}</span>
             </div>
-            <div v-if="file.formatted_info?.loras?.length" class="info-group">
+            <div v-if="file.summary?.loras?.length" class="info-group">
               <span class="label">LoRAs:</span>
-              <span class="value">{{ file.formatted_info.loras.join(', ') }}</span>
+              <span class="value">{{ file.summary.loras.join(', ') }}</span>
             </div>
-            <div v-if="file.formatted_info?.width" class="info-group">
+            <div v-if="file.summary?.width" class="info-group">
               <span class="label">Res:</span>
-              <span class="value">{{ file.formatted_info.width }}x{{ file.formatted_info.height }}</span>
+              <span class="value">{{ file.summary.width }}x{{ file.summary.height }}</span>
             </div>
           </div>
           <div class="col-meta">
@@ -228,7 +229,7 @@
               @close="handleCloseTag(file, tag)">
               {{ tag }}
             </el-tag>
-            <el-input v-if="inputVisibleMap[file.name]" ref="tagInputRef" v-model="inputValueMap[file.name]"
+            <el-input v-if="inputVisibleMap[getFileKey(file)]" ref="tagInputRef" v-model="inputValueMap[getFileKey(file)]"
               class="input-new-tag" size="small" @keyup.enter="handleTagInputConfirm(file)"
               @blur="handleTagInputConfirm(file)" />
             <el-button v-else class="button-new-tag" size="small" :icon="Plus" circle
@@ -242,7 +243,7 @@
     </div>
 
     <!-- 图片预览对话框 -->
-    <ImagePreviewDialog v-if="enableImagePreview" v-model="showImagePreview" :preview-file-list="previewableFiles"
+    <ImagePreviewDialog @stale="$emit('stale', $event)" v-if="enableImagePreview" v-model="showImagePreview" :preview-file-list="previewableFiles"
       :initial-index="currentPreviewIndex" :folder-type="folderType" :folder-path="folderPath">
       <template #actions="{ file }">
         <slot name="actions" :file="file">
@@ -264,11 +265,12 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, type PropType, ref, nextTick, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { defineComponent, type PropType } from 'vue'
+import i18n from '@/i18n'
+import { fileIdentity } from '@/utils'
+import FileThumbnail from './FileThumbnail.vue'
 import { Folder, Document, Search, ZoomIn, ZoomOut, Plus, Filter, Menu, Grid, Refresh } from '@element-plus/icons-vue'
 import {
-  ElMessage,
   ElInput,
   ElSelect,
   ElOption,
@@ -284,13 +286,14 @@ import {
   ElEmpty
 } from 'element-plus'
 import type { FileInfo, FolderType } from '@/types'
-import { subscribeMetadata } from '@/api/metadata-subscription'
+
 import ImagePreviewDialog from './ImagePreviewDialog/ImagePreviewDialog.vue'
-import { addFileTag, removeFileTag, fetchAllTags, reindexFiles } from '@/api/files'
+import { addFileTag, removeFileTag, fetchAllTags } from '@/api/files'
 
 export default defineComponent({
   name: 'FileCardList',
   components: {
+    FileThumbnail,
     Folder,
     Document,
     Search,
@@ -317,6 +320,7 @@ export default defineComponent({
     ElEmpty
   },
   props: {
+    scopeRevision: { type: Number, default: 0 },
     files: {
       type: Array as PropType<FileInfo[]>,
       required: true
@@ -350,97 +354,14 @@ export default defineComponent({
       default: ''
     }
   },
-  emits: ['file-click', 'page-change', 'refresh', 'update-file'],
-  setup(props) {
-    const { t } = useI18n()
-
-    // Tag Input Refs
-    const tagInputRef = ref<InstanceType<typeof ElInput>>()
-
-    // Tag management state
-    const inputVisibleMap = ref<Record<string, boolean>>({})
-    const inputValueMap = ref<Record<string, string>>({})
-
-    // Search & Filter state
-    const allTags = ref<string[]>([])
-    const selectedTags = ref<string[]>([])
-
-    const loadTags = async () => {
-      try {
-        allTags.value = await fetchAllTags()
-      } catch (e) {
-        console.error("Failed to load tags", e)
-      }
-    }
-
-    onMounted(() => {
-      loadTags()
-    })
-
-    const showTagInput = (file: FileInfo) => {
-      inputVisibleMap.value[file.name] = true
-      nextTick(() => {
-        tagInputRef.value?.input?.focus()
-      })
-    }
-
-    const handleTagInputConfirm = async (file: FileInfo) => {
-      const inputValue = inputValueMap.value[file.name]
-      if (inputValue) {
-        try {
-          const targetFolderPath = file.folder_path || props.folderPath
-          const { tags } = await addFileTag(props.folderType, file.name, inputValue, targetFolderPath)
-          // Update local file data
-          if (file.tags) {
-            file.tags = tags
-          } else {
-            file.tags = tags
-          }
-          // Refresh global tag list if it's a new tag
-          if (!allTags.value.includes(inputValue)) {
-            allTags.value.push(inputValue)
-            allTags.value.sort()
-          }
-          ElMessage.success(t('common.addSuccess'))
-        } catch (error) {
-          console.error('Failed to add tag:', error)
-          ElMessage.error(t('common.addFailed'))
-        }
-      }
-      inputVisibleMap.value[file.name] = false
-      inputValueMap.value[file.name] = ''
-    }
-
-    const handleCloseTag = async (file: FileInfo, tag: string) => {
-      try {
-        const targetFolderPath = file.folder_path || props.folderPath
-        const { tags } = await removeFileTag(props.folderType, file.name, tag, targetFolderPath)
-        // Update local file data
-        if (file.tags) {
-          file.tags = tags
-        }
-        ElMessage.success(t('common.deleteSuccess'))
-      } catch (error) {
-        console.error('Failed to remove tag:', error)
-        ElMessage.error(t('common.deleteFailed'))
-      }
-    }
-
-    return {
-      t,
-      tagInputRef,
-      inputVisibleMap,
-      inputValueMap,
-      allTags,
-      selectedTags,
-      showTagInput,
-      handleTagInputConfirm,
-      handleCloseTag,
-      Plus
-    }
-  },
+  emits: ['file-click', 'page-change', 'refresh', 'update-file', 'visible-files', 'reindex', 'stale'],
   data() {
     return {
+      Plus,
+      inputVisibleMap: {} as Record<string, boolean>,
+      inputValueMap: {} as Record<string, string>,
+      allTags: [] as string[],
+      selectedTags: [] as string[],
       showImagePreview: false,
       previewImageUrl: '',
       previewImageName: '',
@@ -456,8 +377,7 @@ export default defineComponent({
       // 新增状态
       viewMode: 'grid' as 'grid' | 'list',
       selectedSearchDimensions: [] as string[],
-      isReindexing: false,
-      metadataSubscriptions: [] as Array<() => void>
+      listActive: true
     }
   },
   computed: {
@@ -502,9 +422,9 @@ export default defineComponent({
         if (dims.includes('formattedSize') && file.formattedSize) valuesToCheck.push(file.formattedSize)
         if (dims.includes('path')) valuesToCheck.push(file.folder_path || file.path || '')
 
-        if (file.formatted_info) {
-          if (dims.includes('models') && file.formatted_info.models) valuesToCheck.push(...file.formatted_info.models)
-          if (dims.includes('loras') && file.formatted_info.loras) valuesToCheck.push(...file.formatted_info.loras)
+        if (file.summary) {
+          if (dims.includes('models') && file.summary.models) valuesToCheck.push(...file.summary.models)
+          if (dims.includes('loras') && file.summary.loras) valuesToCheck.push(...file.summary.loras)
         }
 
         if (dims.includes('tags') && file.tags) valuesToCheck.push(...file.tags)
@@ -551,15 +471,14 @@ export default defineComponent({
       return !!this.$slots['batch-actions']
     }
   },
-  mounted() {
-    this.scheduleMetadataWarmup()
-  },
-  beforeUnmount() {
-    this.metadataSubscriptions.forEach(unsubscribe => unsubscribe())
-  },
+  mounted() { this.loadTags(); this.publishVisibleFiles() },
+  activated() { this.listActive = true; this.publishVisibleFiles() },
+  deactivated() { this.listActive = false; this.showImagePreview = false },
   watch: {
+    selectedTags() { this.currentPage = 1 },
+    scopeRevision() { this.currentPage = 1; this.clearSelection(); this.showImagePreview = false },
     paginatedFiles() {
-      this.scheduleMetadataWarmup()
+      this.publishVisibleFiles()
     },
     files() {
       this.handleFilesChange()
@@ -581,38 +500,38 @@ export default defineComponent({
     }
   },
   methods: {
+    t(key: string, params?: Record<string, unknown>): string { return params ? i18n.global.t(key, params) : i18n.global.t(key) },
+    async loadTags() {
+      try { this.allTags = await fetchAllTags() } catch (error) { console.error('读取标签失败', error) }
+    },
+    showTagInput(file: FileInfo) { this.inputVisibleMap[this.getFileKey(file)] = true },
+    async handleTagInputConfirm(file: FileInfo) {
+      const key = this.getFileKey(file), value = this.inputValueMap[key]
+      if (value) {
+        try {
+          const result = await addFileTag(this.folderType, file.name, value, file.folder_path ?? this.folderPath)
+          file.tags = result.tags
+          if (!this.allTags.includes(value)) this.allTags.push(value)
+        } catch (error) { console.error('添加标签失败', error) }
+      }
+      this.inputVisibleMap[key] = false
+      this.inputValueMap[key] = ''
+    },
+    async handleCloseTag(file: FileInfo, tag: string) {
+      try { file.tags = (await removeFileTag(this.folderType, file.name, tag, file.folder_path ?? this.folderPath)).tags }
+      catch (error) { console.error('移除标签失败', error) }
+    },
     handleFilesChange() {
       const maxPage = Math.ceil(this.filteredFiles.length / this.internalPageSize) || 1
       if (this.currentPage > maxPage) {
         this.currentPage = maxPage
       }
-      this.scheduleMetadataWarmup()
+      this.publishVisibleFiles()
     },
-    /**
-     * 将缺失图片元数据的文件加入队列，分批异步补齐，避免首屏卡顿。
-     */
-    scheduleMetadataWarmup() {
-      this.metadataSubscriptions.forEach(unsubscribe => unsubscribe())
-      this.metadataSubscriptions = []
-      this.paginatedFiles.forEach(file => {
-        if (file.fileType !== 'image' || (file.formatted_info?.parser_version && !file.metadata_pending)) return
-        const folderPath = file.folder_path ?? this.folderPath ?? ''
-        this.metadataSubscriptions.push(subscribeMetadata(this.folderType as FolderType, file.name, folderPath, metadata => {
-          if (metadata.formatted_info) file.formatted_info = metadata.formatted_info
-          if (metadata.tags) file.tags = metadata.tags
-          file.metadata_pending = metadata.metadata_pending ?? false
-        }))
-      })
+    publishVisibleFiles() {
+      if (this.listActive) this.$emit('visible-files', this.paginatedFiles.slice(0, 100))
     },
-    getFileKey(file: FileInfo): string {
-      if (file.hash) {
-        return file.hash
-      }
-      if (file.folder_path) {
-        return `${file.folder_path}/${file.name}`
-      }
-      return file.name
-    },
+    getFileKey(file: FileInfo): string { return fileIdentity(this.folderType, file) },
     handleCardClick(file: FileInfo) {
       if (this.isManagementMode) {
         this.toggleSelection(file)
@@ -694,22 +613,8 @@ export default defineComponent({
       const all = this.searchDimensionsOptions.map(d => d.value)
       this.selectedSearchDimensions = all.filter(d => !this.selectedSearchDimensions.includes(d))
     },
-    async handleReindex() {
-      if (this.isReindexing) {
-        return
-      }
-      this.isReindexing = true
-      try {
-        await reindexFiles(this.folderType as FolderType, this.folderPath || undefined)
-        this.$emit('refresh')
-        ElMessage.success(this.t('common.reindexSuccess'))
-      } catch (error) {
-        console.error('Reindex files failed:', error)
-        ElMessage.error(this.t('common.reindexFailed'))
-      } finally {
-        this.isReindexing = false
-      }
-    }
+    handleReindex() { this.$emit('reindex') }
+
   }
 })
 </script>

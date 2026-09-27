@@ -92,6 +92,12 @@ export const getDirectoryPreferences = (listId: string): DirectoryPreference[] =
   }))
 }
 
+/** 区分首次访问与用户明确保存的空选择。 */
+export const hasDirectoryPreferences = (listId: string): boolean => {
+  const directories = getLocalConfig()[DIRECTORY_STORAGE_KEY] as DirectoryPreferencesMap | undefined
+  return !!directories && Object.prototype.hasOwnProperty.call(directories, listId)
+}
+
 /**
  * 写入指定列表的目录偏好
  */
@@ -109,32 +115,11 @@ export const setDirectoryPreferences = (listId: string, preferences: DirectoryPr
  * 获取文件 URL
  */
 export const getFileUrl = (folderType: string, file: FileInfo): string => {
-  const basePath = `/browser/s/${folderType}`
-  if (file.folder_path) {
-    return `${basePath}/${file.folder_path}/${file.name}`
+  if (file.folder_path?.startsWith('@external/')) {
+    const params = new URLSearchParams({ folder_type: folderType, folder_path: file.folder_path, filename: file.name })
+    return `/browser/files/view?${params}`
   }
-  return `${basePath}/${file.name}`
-}
-
-/**
- * 根据文件名和扩展名查找文件
- */
-export const findFileByNameAndExtensions = (
-  filename: string,
-  extensions: string[],
-  files: FileInfo[]
-): FileInfo | undefined => {
-  const nameParts = filename.split('.')
-  nameParts.pop()
-  const baseFilename = nameParts.join('.')
-
-  return files.find((file) => {
-    const fileParts = file.name.split('.')
-    const fileExtension = fileParts.pop()?.toLowerCase()
-    const fileBasename = fileParts.join('.')
-
-    return fileBasename === baseFilename && fileExtension && extensions.includes(fileExtension)
-  })
+  return `/browser/s/${folderType}/${[...normalizeRelativePath(file.folder_path || '').split('/').filter(Boolean), file.name].map(encodeURIComponent).join('/')}`
 }
 
 /**
@@ -143,8 +128,16 @@ export const findFileByNameAndExtensions = (
 export const processFileInfo = (
   file: FileInfo,
   folderType: FolderType,
-  allFiles: FileInfo[]
+  allFiles: FileInfo[] | Map<string, FileInfo>
 ): FileInfo | null => {
+  const lookup = (extensions: string[]) => {
+    const index = allFiles instanceof Map ? allFiles : buildFileIndex(allFiles)
+    const base = file.name.slice(0, file.name.lastIndexOf('.'))
+    for (const extension of extensions) {
+      const match = index.get(JSON.stringify([file.folder_path || '', base, extension]))
+      if (match) return match
+    }
+  }
   const extensionParts = file.name.split('.')
   const extension = extensionParts.pop()?.toLowerCase()
 
@@ -158,11 +151,7 @@ export const processFileInfo = (
 
     // 如果是 JSON 文件，检查是否有对应的图片/视频文件
     if (extension === 'json') {
-      const hasMediaFile = findFileByNameAndExtensions(
-        file.name,
-        [...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS],
-        allFiles
-      )
+      const hasMediaFile = lookup([...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS])
       if (hasMediaFile) {
         return null // 不单独显示JSON文件，它会作为元数据附加到媒体文件上
       }
@@ -188,7 +177,7 @@ export const processFileInfo = (
   if (fileType === 'image' || fileType === 'video') {
     file.previewUrl = getFileUrl(folderType, file)
 
-    const jsonFile = findFileByNameAndExtensions(file.name, JSON_EXTENSIONS, allFiles)
+    const jsonFile = lookup(JSON_EXTENSIONS)
     if (jsonFile) {
       file.url = getFileUrl(folderType, jsonFile)
     }
@@ -254,4 +243,21 @@ export const setLocalConfig = (key: string, value: unknown): void => {
   const localConfig = getLocalConfig()
   localConfig[key] = value
   localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(localConfig))
+}
+
+export const fileIdentity = (folderType: string, file: FileInfo): string => JSON.stringify([folderType, normalizeRelativePath(file.folder_path || ''), file.name])
+
+/** 每个目录预建一次同名索引，媒体配对只做常量次查询。 */
+export function buildFileIndex(files: FileInfo[]): Map<string, FileInfo> {
+  const index = new Map<string, FileInfo>()
+  for (const file of files) {
+    const dot = file.name.lastIndexOf('.')
+    index.set(JSON.stringify([file.folder_path || '', file.name.slice(0, dot), file.name.slice(dot + 1).toLowerCase()]), file)
+  }
+  return index
+}
+export function processDirectoryFiles(files: FileInfo[], type: FolderType, path: string): FileInfo[] {
+  files.forEach(file => { file.folder_path ??= path })
+  const index = buildFileIndex(files)
+  return files.map(file => file.type === 'dir' ? processDirectoryInfo(file) : processFileInfo(file, type, index)).filter((file): file is FileInfo => !!file)
 }

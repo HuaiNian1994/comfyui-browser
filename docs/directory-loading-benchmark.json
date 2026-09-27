@@ -1,0 +1,368 @@
+{
+  "baseline_commit": "fc554f001df61b86b460db58b7c0168c3aa9c0bd",
+  "repeats": 5,
+  "baseline": [
+    {
+      "scenario": "plain",
+      "images": 1000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 6.150092,
+        "connections": 2002,
+        "response_bytes": 381110
+      },
+      "warm": {
+        "seconds": 1.166415,
+        "connections": 1002,
+        "response_bytes": 529110
+      }
+    },
+    {
+      "scenario": "plain",
+      "images": 2000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 12.446261,
+        "connections": 4002,
+        "response_bytes": 762267
+      },
+      "warm": {
+        "seconds": 2.329502,
+        "connections": 2002,
+        "response_bytes": 1058267
+      }
+    },
+    {
+      "scenario": "plain",
+      "images": 5000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 31.730854,
+        "connections": 10002,
+        "response_bytes": 1905862
+      },
+      "warm": {
+        "seconds": 5.9825,
+        "connections": 5002,
+        "response_bytes": 2645862
+      }
+    },
+    {
+      "scenario": "paired",
+      "images": 1000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 12.386001,
+        "connections": 4002,
+        "response_bytes": 765181
+      },
+      "warm": {
+        "seconds": 2.286043,
+        "connections": 2002,
+        "response_bytes": 1060181
+      }
+    },
+    {
+      "scenario": "paired",
+      "images": 2000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 24.868544,
+        "connections": 8002,
+        "response_bytes": 1530377
+      },
+      "warm": {
+        "seconds": 4.577839,
+        "connections": 4002,
+        "response_bytes": 2120377
+      }
+    },
+    {
+      "scenario": "paired",
+      "images": 5000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 62.924211,
+        "connections": 20002,
+        "response_bytes": 3827099
+      },
+      "warm": {
+        "seconds": 12.27948,
+        "connections": 10002,
+        "response_bytes": 5302099
+      }
+    },
+    {
+      "scenario": "metadata",
+      "images": 1000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 6.318061,
+        "connections": 2002,
+        "response_bytes": 387076
+      },
+      "warm": {
+        "seconds": 1.386087,
+        "connections": 1002,
+        "response_bytes": 21620076
+      }
+    },
+    {
+      "scenario": "metadata",
+      "images": 2000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 12.709808,
+        "connections": 4002,
+        "response_bytes": 774130
+      },
+      "warm": {
+        "seconds": 2.655044,
+        "connections": 2002,
+        "response_bytes": 43240130
+      }
+    },
+    {
+      "scenario": "metadata",
+      "images": 5000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 32.079148,
+        "connections": 10002,
+        "response_bytes": 1935882
+      },
+      "warm": {
+        "seconds": 6.860807,
+        "connections": 5002,
+        "response_bytes": 108100882
+      }
+    },
+    {
+      "scenario": "multiple",
+      "images": 1000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 6.345003,
+        "connections": 2004,
+        "response_bytes": 387023
+      },
+      "warm": {
+        "seconds": 1.222635,
+        "connections": 1004,
+        "response_bytes": 535023
+      }
+    },
+    {
+      "scenario": "multiple",
+      "images": 2000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 12.727057,
+        "connections": 4004,
+        "response_bytes": 774311
+      },
+      "warm": {
+        "seconds": 2.394756,
+        "connections": 2004,
+        "response_bytes": 1070311
+      }
+    },
+    {
+      "scenario": "multiple",
+      "images": 5000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 31.653101,
+        "connections": 10004,
+        "response_bytes": 1935637
+      },
+      "warm": {
+        "seconds": 6.075597,
+        "connections": 5004,
+        "response_bytes": 2675637
+      }
+    }
+  ],
+  "after": [
+    {
+      "scenario": "plain",
+      "images": 1000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 0.99493,
+        "connections": 3,
+        "response_bytes": 502380
+      },
+      "warm": {
+        "seconds": 0.827657,
+        "connections": 3,
+        "response_bytes": 623380
+      }
+    },
+    {
+      "scenario": "plain",
+      "images": 2000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 1.982787,
+        "connections": 3,
+        "response_bytes": 1004922
+      },
+      "warm": {
+        "seconds": 1.626544,
+        "connections": 3,
+        "response_bytes": 1246922
+      }
+    },
+    {
+      "scenario": "plain",
+      "images": 5000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 4.982685,
+        "connections": 3,
+        "response_bytes": 2511758
+      },
+      "warm": {
+        "seconds": 4.107957,
+        "connections": 3,
+        "response_bytes": 3116758
+      }
+    },
+    {
+      "scenario": "paired",
+      "images": 1000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 1.984882,
+        "connections": 3,
+        "response_bytes": 1006904
+      },
+      "warm": {
+        "seconds": 1.639106,
+        "connections": 3,
+        "response_bytes": 1246904
+      }
+    },
+    {
+      "scenario": "paired",
+      "images": 2000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 3.979035,
+        "connections": 3,
+        "response_bytes": 2013898
+      },
+      "warm": {
+        "seconds": 3.294279,
+        "connections": 3,
+        "response_bytes": 2493898
+      }
+    },
+    {
+      "scenario": "paired",
+      "images": 5000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 10.029086,
+        "connections": 3,
+        "response_bytes": 5034576
+      },
+      "warm": {
+        "seconds": 8.23007,
+        "connections": 3,
+        "response_bytes": 6234576
+      }
+    },
+    {
+      "scenario": "metadata",
+      "images": 1000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 0.983915,
+        "connections": 3,
+        "response_bytes": 508455
+      },
+      "warm": {
+        "seconds": 0.861826,
+        "connections": 3,
+        "response_bytes": 629455
+      }
+    },
+    {
+      "scenario": "metadata",
+      "images": 2000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 1.970595,
+        "connections": 3,
+        "response_bytes": 1016945
+      },
+      "warm": {
+        "seconds": 1.737339,
+        "connections": 3,
+        "response_bytes": 1258945
+      }
+    },
+    {
+      "scenario": "metadata",
+      "images": 5000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 5.104816,
+        "connections": 3,
+        "response_bytes": 2542229
+      },
+      "warm": {
+        "seconds": 4.32309,
+        "connections": 3,
+        "response_bytes": 3147229
+      }
+    },
+    {
+      "scenario": "multiple",
+      "images": 1000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 0.978047,
+        "connections": 6,
+        "response_bytes": 508535
+      },
+      "warm": {
+        "seconds": 0.80759,
+        "connections": 6,
+        "response_bytes": 629535
+      }
+    },
+    {
+      "scenario": "multiple",
+      "images": 2000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 1.990907,
+        "connections": 6,
+        "response_bytes": 1017088
+      },
+      "warm": {
+        "seconds": 1.618787,
+        "connections": 6,
+        "response_bytes": 1259088
+      }
+    },
+    {
+      "scenario": "multiple",
+      "images": 5000,
+      "repeats": 5,
+      "cold": {
+        "seconds": 4.917303,
+        "connections": 6,
+        "response_bytes": 2542361
+      },
+      "warm": {
+        "seconds": 4.051398,
+        "connections": 6,
+        "response_bytes": 3147361
+      }
+    }
+  ]
+}

@@ -7,18 +7,20 @@ import shutil
 import subprocess
 import sys
 
-from ..utils import get_target_folder_files, get_parent_path, get_info_filename, extract_comfyui_png_metadata, extract_detailed_metadata
-from ..constants import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
+from ..utils import get_target_folder_files, get_parent_path, extract_detailed_metadata
+from ..constants import IMAGE_EXTENSIONS
 from ..services.db_service import DBService
 from ..services.metadata_indexer import MetadataIndexQueue, MetadataIndexTask
 from ..metadata.registry import PARSER_VERSION
-from ..timing.storage import read_summary, file_lock
+from ..timing.storage import read_summary, file_lock, file_locks
+from ..utils.path_utils import resolve_folder_path, resolve_file_path, resolve_sidecar_path
+from ..services.directory_service import DirectoryScanService, directory_sync_lock
+from ..services.reindex_service import ReindexService
 
 db_service = DBService()
 metadata_index_queue = MetadataIndexQueue(db_service, extract_detailed_metadata)
-
-# 首次列表仅返回基础信息，不在请求路径中同步提取图片元数据，避免阻塞
-INLINE_METADATA_SYNC_LIMIT = 0
+directory_scan_service = DirectoryScanService()
+reindex_service = ReindexService()
 
 def normalize_folder_path(folder_path: str) -> str:
     """
@@ -29,11 +31,10 @@ def normalize_folder_path(folder_path: str) -> str:
     return folder_path.strip('/').replace('\\', '/')
 
 
-def update_file_info(file_path, notes=None, tags=None):
+def update_file_info(info_file_path, notes=None, tags=None):
     """辅助函数：更新 .info 文件中的 notes 和 tags"""
-    info_file_path = get_info_filename(file_path)
     info_data = {}
-    
+
     # 1. 读取现有数据 (如果存在)
     if path.exists(info_file_path):
         try:
@@ -41,13 +42,13 @@ def update_file_info(file_path, notes=None, tags=None):
                 info_data = json.load(f)
         except Exception:
             pass # 如果读取失败，就覆盖它
-            
+
     # 2. 更新字段
     if notes is not None:
         info_data['notes'] = notes
     if tags is not None:
         info_data['tags'] = tags
-        
+
     # 3. 写入文件
     try:
         with open(info_file_path, 'w', encoding='utf-8') as f:
@@ -57,111 +58,189 @@ def update_file_info(file_path, notes=None, tags=None):
 
 
 def create_metadata_task(record, full_path, folder_path, folder_type):
-    """任务保存精确文件版本，后台写入同时核验记录身份。"""
-    stat = os.stat(full_path)
+    """任务直接复用数据库身份，构造过程无需读取文件。"""
     return MetadataIndexTask(
         filename=record['filename'], folder_path=folder_path, folder_type=folder_type,
         file_path=full_path, bytes_size=record['bytes'], created_at=record['created_at'],
-        mtime=record['mtime'], mtime_ns=stat.st_mtime_ns, hash_val=record['hash'],
-        record_id=record.get('id'),
-    )
+        mtime=record['mtime'], mtime_ns=record.get('mtime_ns'), hash_val=record['hash'],
+        record_id=record.get('id'), index_generation=record.get('index_generation'))
 
 
 def schedule_file_metadata(record, full_path, folder_path, folder_type, queue, force=False):
-    """版本过期自动补齐；已失败的同版本任务由用户刷新重试。"""
     if path.splitext(record['filename'])[1].lower() not in IMAGE_EXTENSIONS:
         return 'complete'
-    task = create_metadata_task(record, full_path, folder_path, folder_type)
-    info = record.get('formatted_info') or {}
-    outdated = info.get('parser_version') != PARSER_VERSION
-    if queue and (force or outdated):
-        queue.enqueue(task, force=force)
-    return (queue.status(task) if queue else None) or info.get('index_status', 'waiting' if outdated else 'complete')
+    task = create_metadata_task(record,full_path,folder_path,folder_type)
+    info = record.get('summary') or record.get('formatted_info') or {}
+    failed = info.get('parse_status')=='failed' or info.get('index_status')=='failed'
+    outdated = info.get('parser_version')!=PARSER_VERSION
+    if queue and (force or (outdated and not failed)):
+        queue.enqueue(task,force=force)
+    status = queue.status(task) if queue else None
+    # 终态必须与本次数据库快照的摘要一致；队列可能已提交了快照之后的新结果。
+    if status=='complete' and (outdated or failed):
+        return 'waiting'
+    return status or ('failed' if failed else 'waiting' if outdated else 'complete')
 
 
-def synchronize_folder(
-    folder_path: str,
-    folder_type: str,
-    metadata_limit: int = INLINE_METADATA_SYNC_LIMIT,
-    metadata_queue: MetadataIndexQueue = metadata_index_queue,
-    database: DBService = db_service
-):
-    """快速同步文件身份，图片属性由后台队列按解析版本补齐。"""
+def synchronize_folder(folder_path,folder_type,metadata_queue=metadata_index_queue,database=db_service,reindex=False):
+    """同目录的普通扫描与重建共用完整同步锁。"""
     normalized = normalize_folder_path(folder_path)
-    disk_files = get_target_folder_files(normalized, folder_type=folder_type)
+    with directory_sync_lock(database,folder_type,normalized):
+        return _synchronize_folder_locked(normalized,folder_type,metadata_queue,database,reindex)
+
+
+def _synchronize_folder_locked(folder_path,folder_type,metadata_queue,database,reindex):
+    """批量同步文件身份；逐文件锁仅覆盖 stat，数据库提交保持批量。"""
+    normalized = normalize_folder_path(folder_path)
+    disk_files = get_target_folder_files(normalized,folder_type=folder_type)
     if disk_files is None:
         return []
-    records = database.get_files_in_folder(normalized, folder_type)
-    parent = get_parent_path(folder_type)
-    disk_names = {item['name'] for item in disk_files}
-    removed = [name for name in records if name not in disk_names]
-    if removed:
-        database.delete_files(normalized, folder_type, removed)
+    records = database.get_files_in_folder(normalized,folder_type)
+    observed_tasks = [create_metadata_task(record,'',normalized,folder_type) for record in records.values()]
+    changes = []
+    migrated_notes = []
+    present = []
     for item in disk_files:
-        if item['type'] == 'dir':
+        if item['type']=='dir':
+            present.append(item)
             continue
-        with file_lock(path.join(parent, normalized, item['name'])):
-            stat = os.stat(path.join(parent, normalized, item['name']))
-            item.update(bytes=stat.st_size, mtime=stat.st_mtime)
-            record = database.get_file(item['name'], normalized, folder_type, identity_only=True)
-            changed = not record or record.get('mtime') != item.get('mtime') or record.get('bytes') != item.get('bytes')
-            if changed:
-                full_path = path.join(parent, normalized, item['name'])
-                tags = None
-                sidecar = get_info_filename(full_path)
-                if path.exists(sidecar):
-                    try:
-                        with open(sidecar, encoding='utf-8') as stream:
-                            tags = json.load(stream).get('tags')
-                    except (OSError, ValueError):
-                        pass
-                database.upsert_file(
-                    filename=item['name'], folder_path=normalized, folder_type=folder_type,
-                    bytes_size=item['bytes'], created_at=item['created_at'], mtime=item['mtime'],
-                    hash_val=f"{full_path}{item['mtime']}{item['bytes']}", formatted_info={}, tags=tags,
-                )
-    records = database.get_files_in_folder(normalized, folder_type)
-    for item in disk_files:
-        if item['type'] == 'dir':
+        full_path = resolve_file_path(folder_type,normalized,item['name'])
+        try:
+            with file_lock(full_path):
+                stat = os.stat(full_path)
+            item.update(bytes=stat.st_size,mtime=stat.st_mtime,mtime_ns=stat.st_mtime_ns)
+        except FileNotFoundError:
+            continue
+        record = records.get(item['name'])
+        if record and not record.get('notes_initialized'):
+            notes = ''
+            try:
+                with open(resolve_sidecar_path(folder_type,normalized,item['name']),encoding='utf-8') as stream:
+                    notes = json.load(stream).get('notes','')
+            except (OSError,ValueError):
+                pass
+            migrated_notes.append((notes,record['id']))
+        if not record or record.get('mtime_ns')!=stat.st_mtime_ns or record['bytes']!=stat.st_size:
+            item['hash'] = f'{full_path}{stat.st_mtime_ns}{stat.st_size}'
+            if not record:
+                try:
+                    with open(resolve_sidecar_path(folder_type,normalized,item['name']),encoding='utf-8') as stream:
+                        sidecar = json.load(stream)
+                    item.update(tags=sidecar.get('tags',[]),notes=sidecar.get('notes',''))
+                except (OSError,ValueError):
+                    pass
+            changes.append((item,record))
+        present.append(item)
+    if migrated_notes:
+        database.initialize_notes(migrated_notes)
+    names = {item['name'] for item in present}
+    database.sync_identities(normalized,folder_type,changes,[record for name,record in records.items() if name not in names])
+    if reindex:
+        database.bump_generation(normalized,folder_type)
+    records = database.get_files_in_folder(normalized,folder_type)
+    tasks = []
+    result = []
+    for item in present:
+        if item['type']=='dir':
+            result.append(item)
             continue
         record = records.get(item['name'])
         if not record:
             continue
-        try:
-            status = schedule_file_metadata(record, path.join(parent, normalized, item['name']), normalized, folder_type, metadata_queue)
-        except OSError:
-            status = 'failed'
-        item.update(hash=record.get('hash'), formatted_info=record.get('formatted_info'),
-                    tags=record.get('tags', []), metadata_pending=status in {'waiting', 'processing'})
-    return disk_files
+        full_path = resolve_file_path(folder_type,normalized,item['name'])
+        task = create_metadata_task(record,full_path,normalized,folder_type)
+        tasks.append(task)
+        status = schedule_file_metadata(record,full_path,normalized,folder_type,metadata_queue)
+        item.update(bytes=record['bytes'],mtime=record['mtime'],mtime_ns=record['mtime_ns'],created_at=record['created_at'],
+                    hash=record.get('hash'),tags=record.get('tags',[]),notes=record.get('notes',''),
+                    file_version=record['file_version'],index_generation=record['index_generation'],
+                    summary=record.get('summary',{}),index_status=status,
+                    metadata_pending=status in {'waiting','processing'},folder_path=normalized)
+        result.append(item)
+    if metadata_queue:
+        metadata_queue.forget_folder(folder_type,normalized,tasks,observed_tasks=observed_tasks)
+    return result
 
 
-# folder_path, folder_type
+def request_services(request):
+    app = getattr(request,'app',{})
+    return app.get('file_database',db_service),app.get('file_metadata_queue',metadata_index_queue)
+
+
 async def api_get_files(request):
-    folder_path = request.query.get('folder_path', '')
-    folder_type = request.query.get('folder_type', 'outputs')
-    
-    # 1. Get disk files (Disk Scan - fast)
-    parent_path = get_parent_path(folder_type)
-    target_path = path.join(parent_path, normalize_folder_path(folder_path))
-    if folder_path and not path.exists(target_path):
-        return web.Response(status=404)
+    folder_path = normalize_folder_path(request.query.get('folder_path',''))
+    folder_type = request.query.get('folder_type','outputs')
+    try:
+        target = await asyncio.to_thread(resolve_folder_path,folder_type,folder_path)
+        if not await asyncio.to_thread(path.isdir,target):
+            return web.Response(status=404)
+        database,queue = request_services(request)
+        key = (id(database),id(queue),folder_type,folder_path)
+        files = await directory_scan_service.scan(key,lambda:synchronize_folder(folder_path,folder_type,metadata_queue=queue,database=database))
+        return await asyncio.to_thread(web.json_response,{'files':files})
+    except ValueError:
+        return web.Response(status=400,text='Invalid path')
+    except OSError:
+        return web.Response(status=500,text='Directory enumeration failed')
 
-    response_files = await asyncio.to_thread(synchronize_folder, folder_path, folder_type)
 
-    return web.json_response({
-        'files': response_files
-    })
-
-
-def iter_relative_folders(target_root: str, base_root: str):
-    """生成目标目录及其子目录的相对路径（以 / 分隔）。"""
-    for current_dir, _, _ in os.walk(target_root):
-        rel_path = path.relpath(current_dir, base_root)
-        if rel_path == '.':
-            yield ''
+def summary_updates(data,database,queue):
+    if not isinstance(data,dict):
+        raise ValueError('Invalid summary request')
+    folder_type = data.get('folder_type','outputs')
+    if folder_type not in {'outputs','collections','sources'}:
+        raise ValueError('Invalid folder type')
+    requested = data.get('files',[])
+    visible = data.get('visible_files',[])
+    if not isinstance(requested,list) or not isinstance(visible,list) or len(requested)>200 or len(visible)>100:
+        raise ValueError('Invalid batch size')
+    items = []
+    for item in requested+visible:
+        if not isinstance(item,dict) or not isinstance(item.get('name'),str) or not isinstance(item.get('file_version'),str) or not isinstance(item.get('index_generation'),int):
+            raise ValueError('Invalid file identity')
+        folder = normalize_folder_path(item.get('folder_path',''))
+        if any(c in item['name'] for c in '/\\:') or '..' in folder.split('/') or ':' in folder:
+            raise ValueError('Invalid file identity')
+        items.append(dict(item,folder_path=folder))
+    records = database.get_summary_batch(folder_type,items)
+    visible_tasks = []
+    for item in items[len(requested):]:
+        record = records.get((item['folder_path'],item['name']))
+        if record and record['file_version']==item['file_version'] and record['index_generation']==item['index_generation']:
+            visible_tasks.append(create_metadata_task(record,'',item['folder_path'],folder_type))
+    if queue:
+        queue.update_visible(str(data.get('session_id',''))[:200],visible_tasks)
+    result = []
+    for item in items[:len(requested)]:
+        record = records.get((item['folder_path'],item['name']))
+        row = dict(item)
+        if not record:
+            row['status'] = 'missing'
+        elif record['file_version']!=item['file_version'] or record['index_generation']!=item['index_generation']:
+            row['status'] = 'stale'
         else:
-            yield rel_path.replace('\\', '/')
+            task = create_metadata_task(record,'',item['folder_path'],folder_type)
+            summary = record.get('summary') or {}
+            status = queue.status(task) if queue else None
+            if queue and queue.outcome(task)=='superseded':
+                status = 'stale'
+            if status=='complete' and (summary.get('parser_version')!=PARSER_VERSION or summary.get('parse_status')=='failed'):
+                # 下次批量轮询读取提交后的摘要，保持本次快照完整且无需逐文件补读。
+                status = 'waiting'
+            if not status:
+                status = 'failed' if summary.get('parse_status')=='failed' else 'complete' if summary.get('parser_version')==PARSER_VERSION or path.splitext(item['name'])[1].lower() not in IMAGE_EXTENSIONS else 'waiting'
+            row.update(status=status,summary=summary,tags=record['tags'])
+        result.append(row)
+    return {'files':result}
+
+
+async def api_get_summary_updates(request):
+    try:
+        data = await request.json()
+        database,queue = request_services(request)
+        return web.json_response(await asyncio.to_thread(summary_updates,data,database,queue))
+    except (ValueError,TypeError,KeyError):
+        return web.Response(status=400,text='Invalid summary request')
 
 
 def open_system_folder(target_folder: str) -> bool:
@@ -180,240 +259,179 @@ def open_system_folder(target_folder: str) -> bool:
 
 
 async def api_open_folder(request):
-    """
-    在操作系统文件资源管理器中打开指定目录。
-    """
-    json_data = await request.json()
-    folder_type = json_data.get('folder_type', 'outputs')
-    folder_path = normalize_folder_path(json_data.get('folder_path', ''))
-
-    parent_path = get_parent_path(folder_type)
-    normalized_parent = path.abspath(parent_path)
-    target_path = path.abspath(path.join(parent_path, folder_path))
-
-    if not target_path.startswith(normalized_parent):
-        return web.Response(status=400, text="Invalid path")
-    if not path.exists(target_path):
-        return web.Response(status=404, text="Folder not found")
-    if not path.isdir(target_path):
-        target_path = path.dirname(target_path)
-        if not target_path or not path.isdir(target_path):
-            return web.Response(status=400, text="Target is not a directory")
-
-    if not open_system_folder(target_path):
-        return web.Response(status=500, text="Failed to open folder")
-
-    return web.json_response({"opened": True, "path": target_path})
+    data=await request.json()
+    try:
+        target=await asyncio.to_thread(resolve_folder_path,data.get('folder_type','outputs'),data.get('folder_path',''))
+        if not await asyncio.to_thread(path.isdir,target):
+            return web.Response(status=404,text='Folder not found')
+        opened=await asyncio.to_thread(open_system_folder,target)
+        return web.json_response({'opened':opened,'path':target},status=200 if opened else 500)
+    except (ValueError,TypeError):
+        return web.Response(status=400,text='Invalid path')
 
 
 async def api_reindex_files(request):
-    """
-    清空指定目录对应的索引记录并重新索引。
-    """
     try:
-        json_data = await request.json()
-    except Exception:
-        json_data = {}
-
-    folder_type = json_data.get('folder_type', 'outputs')
-    folder_path = normalize_folder_path(json_data.get('folder_path', ''))
-
-    parent_path = get_parent_path(folder_type)
-    normalized_parent = path.abspath(parent_path)
-    target_root = path.abspath(path.join(parent_path, folder_path))
-
-    if not target_root.startswith(normalized_parent):
-        return web.Response(status=400, text="Invalid path")
-    if not path.exists(target_root):
-        return web.Response(status=404, text="Target path not found")
-
-    db_service.clear_records(folder_type, folder_path or None)
-
-    indexed_folders = 0
-    indexed_files = 0
-
-    for relative_path in iter_relative_folders(target_root, normalized_parent):
-        files_in_folder = synchronize_folder(relative_path, folder_type)
-        indexed_folders += 1
-        indexed_files += len([f for f in files_in_folder if f.get('type') != 'dir'])
-
-    return web.json_response({
-        "folder_type": folder_type,
-        "folder_path": folder_path,
-        "indexed_folders": indexed_folders,
-        "indexed_files": indexed_files
-    })
+        data = await request.json()
+        if not isinstance(data,dict):
+            raise ValueError('Invalid request')
+        folder_type = data.get('folder_type','outputs')
+        paths = data.get('folder_paths')
+        if not isinstance(paths,list) or not paths or not all(isinstance(value,str) for value in paths):
+            raise ValueError('Invalid folders')
+        folders = tuple(sorted(set(normalize_folder_path(value) for value in paths)))
+        for folder in folders:
+            target=await asyncio.to_thread(resolve_folder_path,folder_type,folder)
+            if not await asyncio.to_thread(path.isdir,target):
+                return web.Response(status=404,text='Target path not found')
+        database,queue = request_services(request)
+        # 重建范围固定为显式指定目录的当前层。
+        def enumerate_folders():
+            yield from folders
+        def scanner(folder,force):
+            return synchronize_folder(folder,folder_type,metadata_queue=queue,database=database,reindex=force)
+        scope = (folder_type,folders,id(database))
+        job_id = reindex_service.submit(scope,enumerate_folders,scanner,database,queue)
+        return web.json_response({'job_id':job_id,'status':reindex_service.get(job_id)['status']},status=202)
+    except (ValueError,TypeError):
+        return web.Response(status=400,text='Invalid reindex request')
 
 
-# filename, folder_path, folder_type
+async def api_get_reindex_job(request):
+    job = reindex_service.get(request.match_info['job_id'])
+    return web.json_response(job if job else {'error':'job_expired'},status=200 if job else 404)
+
+
+async def shutdown_file_services(app):
+    await asyncio.to_thread(reindex_service.shutdown)
+    await asyncio.to_thread(directory_scan_service.shutdown)
+    queue = app.get('file_metadata_queue',metadata_index_queue)
+    if queue:
+        await asyncio.to_thread(queue.shutdown)
+
+
+def file_operation(handler):
+    """统一处理文件操作的路径和文件系统错误。"""
+    async def wrapped(request):
+        try:
+            return await handler(request)
+        except (ValueError,TypeError,KeyError):
+            return web.json_response({'error':'invalid_path'},status=400)
+        except (FileNotFoundError,NotADirectoryError):
+            return web.json_response({'error':'missing'},status=404)
+        except PermissionError:
+            return web.json_response({'error':'permission_denied'},status=403)
+    return wrapped
+
+
+def file_request(data):
+    folder_type=data.get('folder_type','outputs')
+    folder_path=normalize_folder_path(data.get('folder_path',''))
+    filename=data.get('filename')
+    target=resolve_file_path(folder_type,folder_path,filename)
+    return folder_type,folder_path,filename,target
+
+
+@file_operation
 async def api_delete_file(request):
-    json_data = await request.json()
-    filename = json_data['filename']
-    folder_path = json_data.get('folder_path', '')
-    folder_type = json_data.get('folder_type', 'outputs')
-
-    parent_path = get_parent_path(folder_type)
-    target_path = path.join(parent_path, folder_path, filename)
-    if not path.exists(target_path):
-        return web.json_response(status=404)
-
-    if path.isdir(target_path):
-        shutil.rmtree(target_path)
-    else:
-        os.remove(target_path)
-    info_file_path = get_info_filename(target_path)
-    if path.exists(info_file_path):
-        os.remove(info_file_path)
-
+    data=await request.json()
+    folder_type,folder_path,filename,target=await asyncio.to_thread(file_request,data)
+    sidecar=await asyncio.to_thread(resolve_sidecar_path,folder_type,folder_path,filename)
+    database,_=request_services(request)
+    def remove():
+        with file_locks([target,sidecar]):
+            if path.isdir(target):
+                shutil.rmtree(target)
+                database.clear_records(folder_type,'/'.join(filter(None,[folder_path,filename])))
+            else:
+                os.remove(target)
+                database.delete_files(folder_path,folder_type,[filename])
+            if path.exists(sidecar):
+                os.remove(sidecar)
+    await asyncio.to_thread(remove)
     return web.Response(status=201)
 
 
-    return web.json_response(response_data)
+async def change_tag(request,remove=False):
+    data=await request.json()
+    folder_type,folder_path,filename,target=await asyncio.to_thread(file_request,data)
+    sidecar=await asyncio.to_thread(resolve_sidecar_path,folder_type,folder_path,filename)
+    tag=data.get('tag')
+    if not isinstance(tag,str) or not tag:
+        raise ValueError('Invalid tag')
+    database,_=request_services(request)
+    def update():
+        with file_locks([target,sidecar]):
+            if not path.isfile(target):
+                raise FileNotFoundError(target)
+            record=database.get_file(filename,folder_path,folder_type)
+            if not record:
+                raise FileNotFoundError(target)
+            tags=record.get('tags',[])
+            if remove:
+                tags=[value for value in tags if value!=tag]
+            elif tag not in tags:
+                tags.append(tag)
+            database.update_file_tags(filename,folder_path,folder_type,tags)
+            update_file_info(sidecar,tags=tags)
+            return tags
+    tags=await asyncio.to_thread(update)
+    return web.json_response({'tags':tags})
 
 
-# filename, folder_path, folder_type, tag
+@file_operation
 async def api_add_tag_to_file(request):
-    """为指定文件添加标签"""
-    json_data = await request.json()
-    filename = json_data.get('filename')
-    folder_path = json_data.get('folder_path', '')
-    folder_type = json_data.get('folder_type', 'outputs')
-    tag = json_data.get('tag')
-    
-    parent_path = get_parent_path(folder_type)
-    file_path = path.join(parent_path, folder_path, filename)
-
-    if not (filename and tag):
-        return web.Response(status=400, text="filename and tag are required")
-
-    db_files_map = db_service.get_files_in_folder(folder_path, folder_type)
-    db_record = db_files_map.get(filename)
-
-    if not db_record:
-        return web.Response(status=404, text="File not found in database.")
-
-    current_tags = db_record.get('tags', [])
-    if tag not in current_tags:
-        current_tags.append(tag)
-        db_service.update_file_tags(filename, folder_path, folder_type, current_tags)
-        # Sync to .info file
-        update_file_info(file_path, tags=current_tags)
-    
-    return web.json_response({"tags": current_tags})
+    return await change_tag(request)
 
 
-# filename, folder_path, folder_type, tag
+@file_operation
 async def api_remove_tag_from_file(request):
-    """从指定文件移除标签"""
-    json_data = await request.json()
-    filename = json_data.get('filename')
-    folder_path = json_data.get('folder_path', '')
-    folder_type = json_data.get('folder_type', 'outputs')
-    tag = json_data.get('tag')
-    
-    parent_path = get_parent_path(folder_type)
-    file_path = path.join(parent_path, folder_path, filename)
-
-    if not (filename and tag):
-        return web.Response(status=400, text="filename and tag are required")
-
-    db_files_map = db_service.get_files_in_folder(folder_path, folder_type)
-    db_record = db_files_map.get(filename)
-
-    if not db_record:
-        return web.Response(status=404, text="File not found in database.")
-
-    current_tags = db_record.get('tags', [])
-    if tag in current_tags:
-        current_tags.remove(tag)
-        db_service.update_file_tags(filename, folder_path, folder_type, current_tags)
-        # Sync to .info file
-        update_file_info(file_path, tags=current_tags)
-    
-    return web.json_response({"tags": current_tags})
+    return await change_tag(request,remove=True)
 
 
-# filename, folder_path, folder_type, new_data: {}
+@file_operation
 async def api_update_file(request):
-    json_data = await request.json()
-    filename = json_data['filename']
-    folder_path = json_data.get('folder_path', '')
-    folder_type = json_data.get('folder_type', 'outputs')
-    parent_path = get_parent_path(folder_type)
-
-    new_data = json_data.get('new_data', None)
-    if not new_data:
-        return web.Response(status=400)
-
-    new_filename = new_data.get('filename') # new_filename might be None if only notes/tags are updated
-    notes = new_data.get('notes')
-    tags = new_data.get('tags') # Expecting a list of strings if provided
-
-    old_file_path = path.join(parent_path, folder_path, filename)
-
-    if not path.exists(old_file_path):
-        return web.Response(status=404)
-
-    # 1. 处理文件重命名
-    if new_filename and filename != new_filename:
-        new_file_path = path.join(parent_path, folder_path, new_filename)
-        shutil.move(
-            old_file_path,
-            new_file_path
-        )
-        # 如果有配套的 .info 文件，也一起重命名
-        old_info_file_path = get_info_filename(old_file_path)
-        if path.exists(old_info_file_path):
-            new_info_file_path = get_info_filename(new_file_path)
-            shutil.move(
-                old_info_file_path,
-                new_info_file_path
-            )
-        # 更新文件名变量，以用于后续的 notes/tags 处理
-        filename = new_filename
-        old_file_path = new_file_path # Update old_file_path to the new path for consistency
-
-    # 2. 处理 notes 和 tags 更新 (利用新辅助函数)
-    if notes is not None or tags is not None:
-        update_file_info(old_file_path, notes=notes, tags=tags)
-
-    # 3. 处理 tags 更新 (DB)
-    if tags is not None: # Expecting tags to be a list, even empty list is valid
-        # db_service.update_file_tags 会直接替换标签
-        db_service.update_file_tags(filename, folder_path, folder_type, tags)
-
+    data=await request.json()
+    folder_type,folder_path,filename,target=await asyncio.to_thread(file_request,data)
+    changes=data.get('new_data')
+    if not isinstance(changes,dict) or not changes:
+        raise ValueError('Invalid update')
+    new_name=changes.get('filename') or filename
+    destination,old_sidecar,new_sidecar=await asyncio.to_thread(lambda:(
+        resolve_file_path(folder_type,folder_path,new_name),
+        resolve_sidecar_path(folder_type,folder_path,filename),
+        resolve_sidecar_path(folder_type,folder_path,new_name)))
+    database,_=request_services(request)
+    def update():
+        with file_locks([target,destination,old_sidecar,new_sidecar]):
+            if not path.exists(target):
+                raise FileNotFoundError(target)
+            if new_name!=filename:
+                if path.exists(destination) or (new_sidecar!=old_sidecar and path.exists(new_sidecar)):
+                    raise ValueError('Destination exists')
+                shutil.move(target,destination)
+                if path.exists(old_sidecar):
+                    shutil.move(old_sidecar,new_sidecar)
+                with database.connection() as connection:
+                    connection.execute('UPDATE files SET filename=?,index_generation=index_generation+1 WHERE filename=? AND folder_path=? AND folder_type=?',(new_name,filename,folder_path,folder_type))
+            notes,tags=changes.get('notes'),changes.get('tags')
+            if notes is not None or tags is not None:
+                update_file_info(new_sidecar,notes=notes,tags=tags)
+            if notes is not None:
+                database.update_file_notes(new_name,folder_path,folder_type,notes)
+            if tags is not None:
+                database.update_file_tags(new_name,folder_path,folder_type,tags)
+    await asyncio.to_thread(update)
     return web.Response(status=201)
 
 
-# filename, folder_path, folder_type
+@file_operation
 async def api_view_file(request):
-    folder_type = request.query.get("folder_type", "outputs")
-    folder_path = request.query.get("folder_path", "")
-    filename = request.query.get("filename", None)
-    if not filename:
+    _,_,filename,target=await asyncio.to_thread(file_request,request.query)
+    if not await asyncio.to_thread(path.isfile,target):
         return web.Response(status=404)
-
-    parent_path = get_parent_path(folder_type)
-    file_path = path.join(parent_path, folder_path, filename)
-
-    if not path.exists(file_path):
-        return web.Response(status=404)
-
-    with open(file_path, 'rb') as f:
-        media_file = f.read()
-
-    content_type = 'application/json'
-    file_extension = path.splitext(filename)[1].lower()
-    if file_extension in IMAGE_EXTENSIONS:
-        content_type = f'image/{file_extension[1:]}'
-    if file_extension in VIDEO_EXTENSIONS:
-        content_type = f'video/{file_extension[1:]}'
-
-    return web.Response(
-        body=media_file,
-        content_type=content_type,
-        headers={"Content-Disposition": f"filename=\"{filename}\""}
-    )
+    # FileResponse 分块发送原图、视频和 JSON 工作流，沿用统一注册目录校验。
+    return web.FileResponse(target)
 
 
 # filename, folder_path, folder_type
@@ -423,104 +441,82 @@ async def api_get_image_metadata(request):
 
 
 def get_image_metadata(request):
-    """返回缓存与任务状态；初次读取补齐版本，poll 请求仅读取。"""
-    folder_type = request.query.get('folder_type', 'outputs')
-    folder_path = normalize_folder_path(request.query.get('folder_path', ''))
+    folder_type = request.query.get('folder_type','outputs')
+    folder_path = normalize_folder_path(request.query.get('folder_path',''))
     filename = request.query.get('filename')
-    if not filename:
-        return web.Response(status=400, text='filename is required')
-    if path.basename(filename) != filename or '/' in filename or '\\' in filename:
-        return web.Response(status=400, text='Invalid filename')
-    record = db_service.get_file(filename, folder_path, folder_type)
-    if not record:
-        return web.Response(status=404, text='File not found in synchronized directory')
-    base = path.realpath(get_parent_path(folder_type))
-    full_path = path.realpath(path.join(base, folder_path, filename))
-    if path.commonpath([base, full_path]) != base:
-        return web.Response(status=400, text='Invalid path')
-    if path.splitext(filename)[1].lower() not in IMAGE_EXTENSIONS:
-        return web.json_response({'positive': '', 'negative': '', 'has_metadata': False,
-                                  'formatted_info': {}, 'tags': record.get('tags', []), 'index_status': 'complete'})
     try:
-        stat = os.stat(full_path)
-        if request.query.get('refresh') == '1':
+        full_path = resolve_file_path(folder_type,folder_path,filename)
+    except (ValueError,TypeError):
+        return web.Response(status=400,text='Invalid file identity')
+    database,queue = request_services(request)
+    record = database.get_file(filename,folder_path,folder_type)
+    if not record:
+        return web.Response(status=404)
+    expected = request.query.get('file_version')
+    generation = request.query.get('index_generation')
+    if (expected is not None and expected!=record['file_version']) or (generation is not None and generation!=str(record['index_generation'])):
+        return web.json_response({'error':'stale'},status=409)
+    try:
+        with file_lock(full_path):
+            stat = os.stat(full_path)
+        if record.get('mtime_ns')!=stat.st_mtime_ns or record['bytes']!=stat.st_size:
+            if expected is not None or generation is not None or request.query.get('poll')=='1':
+                return web.json_response({'error':'stale'},status=409)
+            item = dict(name=filename,bytes=stat.st_size,created_at=stat.st_ctime,mtime=stat.st_mtime,mtime_ns=stat.st_mtime_ns,hash=f'{full_path}{stat.st_mtime_ns}{stat.st_size}')
+            database.sync_identities(folder_path,folder_type,[(item,record)])
+            record = database.get_file(filename,folder_path,folder_type)
+        if request.query.get('refresh')=='1':
             from ..timing import storage as timing_storage
             if timing_storage.store:
                 timing_storage.store.retry_file(full_path)
-        if request.query.get('poll') == '1':
-            task = create_metadata_task(record, full_path, folder_path, folder_type)
+        if request.query.get('poll')=='1':
+            task = create_metadata_task(record,full_path,folder_path,folder_type)
             info = record.get('formatted_info') or {}
-            status = metadata_index_queue.status(task) or info.get('index_status')
-            if stat.st_mtime != record['mtime'] or stat.st_size != record['bytes'] or not status:
-                status = 'failed'
-            latest = db_service.get_file(filename, folder_path, folder_type)
-            if not latest:
-                return web.Response(status=404, text='File no longer exists')
-            info = latest.get('formatted_info') or {}
-            timing, pending = read_summary(full_path)
-            if timing:
-                info['generation_timing'] = timing
-            else:
-                info.pop('generation_timing', None)
-            info['timing_pending'] = pending
-            return web.json_response({
-                'positive': info.get('positive_prompt', ''), 'negative': info.get('negative_prompt', ''),
-                'has_metadata': info.get('has_metadata', False), 'formatted_info': info,
-                'tags': latest.get('tags', []), 'index_status': status,
-                'metadata_pending': status in {'waiting', 'processing'},
-                'timing_pending': info.get('timing_pending', False),
-            })
-        if stat.st_mtime != record['mtime'] or stat.st_size != record['bytes']:
-            db_service.upsert_file(filename, folder_path, folder_type, stat.st_size, stat.st_ctime,
-                                   stat.st_mtime, f"{full_path}{stat.st_mtime}{stat.st_size}", {}, None)
-            record = db_service.get_file(filename, folder_path, folder_type)
-        task = create_metadata_task(record, full_path, folder_path, folder_type)
-        status = schedule_file_metadata(record, full_path, folder_path, folder_type, metadata_index_queue,
-                                        force=request.query.get('refresh') == '1')
-        # complete 状态在提交之后发布，随后读取可见的最新数据。
-        record = db_service.get_file(filename, folder_path, folder_type)
+            status = (queue.status(task) if queue else None) or info.get('index_status','waiting' if info.get('parser_version')!=PARSER_VERSION else 'complete')
+        else:
+            status = schedule_file_metadata(record,full_path,folder_path,folder_type,queue,force=request.query.get('refresh')=='1')
+        record = database.get_file(filename,folder_path,folder_type)
         if not record:
-            return web.Response(status=404, text='File no longer exists')
+            return web.Response(status=404)
+        if (expected is not None and expected!=record['file_version']) or (generation is not None and generation!=str(record['index_generation'])):
+            return web.json_response({'error':'stale'},status=409)
+        info = record.get('formatted_info') or {}
+        timing,pending = read_summary(full_path)
+        if timing:
+            info['generation_timing'] = timing
+        else:
+            info.pop('generation_timing',None)
+        info['timing_pending'] = pending
+        return web.json_response({'positive':info.get('positive_prompt',''),'negative':info.get('negative_prompt',''),
+            'has_metadata':info.get('has_metadata',False),'formatted_info':info,'tags':record.get('tags',[]),
+            'index_status':status,'metadata_pending':status in {'waiting','processing'},'timing_pending':pending,
+            'file_version':record['file_version'],'index_generation':record['index_generation']})
     except FileNotFoundError:
-        return web.Response(status=404, text='File no longer exists')
-    info = record.get('formatted_info') or {}
-    timing, pending = read_summary(full_path)
-    if timing:
-        info['generation_timing'] = timing
-    else:
-        info.pop('generation_timing', None)
-    info['timing_pending'] = pending
-    return web.json_response({
-        'positive': info.get('positive_prompt', ''), 'negative': info.get('negative_prompt', ''),
-        'has_metadata': info.get('has_metadata', False), 'formatted_info': info,
-        'tags': record.get('tags', []), 'index_status': status,
-        'metadata_pending': status in {'waiting', 'processing'},
-        'timing_pending': info.get('timing_pending', False),
-    })
+        return web.Response(status=404)
 
 
 # All tags
 async def api_get_all_tags(request):
     """获取所有已使用的唯一标签"""
-    all_tags = db_service.get_all_tags()
-    return web.json_response({"all_tags": all_tags})
+    database,_ = request_services(request)
+    def response():
+        return web.json_response({'all_tags':database.get_all_tags()})
+    return await asyncio.to_thread(response)
 
 
 def refresh_timed_file(full_path):
-    """嵌入计时后仅刷新匹配记录的文件与元数据字段，保留标签。"""
+    """计时提交复用数据库服务，并以旧身份保护并发重建结果。"""
     base = path.realpath(get_parent_path('outputs'))
-    if path.commonpath([base, path.realpath(full_path)]) != base:
+    if path.commonpath([base,path.realpath(full_path)])!=base:
         return
-    relative = path.relpath(full_path, base)
+    relative = path.relpath(full_path,base)
     folder = normalize_folder_path(path.dirname(relative))
     filename = path.basename(full_path)
-    stat = os.stat(full_path)
-    info = extract_detailed_metadata(full_path)
-    info['index_status'] = 'complete'
-    conn = db_service._get_connection()
-    try:
-        with conn:
-            conn.execute("UPDATE files SET bytes=?,mtime=?,hash=?,formatted_info=? WHERE filename=? AND folder_path=? AND folder_type='outputs'",
-                         (stat.st_size, stat.st_mtime, f"{full_path}{stat.st_mtime}{stat.st_size}", json.dumps(info), filename, folder))
-    finally:
-        conn.close()
+    record = db_service.get_file(filename,folder,'outputs')
+    if not record:
+        return
+    with file_lock(full_path):
+        stat = os.stat(full_path)
+        info = extract_detailed_metadata(full_path)
+        info['index_status'] = 'complete'
+        db_service.refresh_timed_file(record,stat,info,f'{full_path}{stat.st_mtime_ns}{stat.st_size}')

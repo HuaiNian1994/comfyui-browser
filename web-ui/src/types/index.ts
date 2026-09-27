@@ -47,6 +47,11 @@ export interface FormattedInfo {
  * 文件信息接口
  */
 export interface FileInfo {
+  file_version?: string
+  index_generation?: number
+  index_status?: string
+  summary?: FormattedInfo
+  thumbnailUrl?: string
   name: string
   type: string
   folder_path?: string
@@ -126,6 +131,8 @@ export interface BrowserConfig {
  * 图片元数据接口
  */
 export interface ImageMetadata {
+  file_version?: string
+  index_generation?: number
   timing_pending?: boolean
   index_status?: 'waiting' | 'processing' | 'complete' | 'failed'
   metadata_pending?: boolean

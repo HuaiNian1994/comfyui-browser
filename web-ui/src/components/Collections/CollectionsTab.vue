@@ -1,5 +1,10 @@
 <template>
   <div class="collections-tab">
+    <div v-if="directoryErrors.length || summaryPaused || reindexStatus" class="directory-status">
+      <span v-for="path in directoryErrors" :key="path">目录 {{ path || '/' }} 加载失败 <el-button link @click="requestScopeRefresh(path)">重试</el-button></span>
+      <span v-if="summaryPaused">摘要更新已暂停 <el-button link @click="retrySummary">重试</el-button></span>
+      <span v-if="reindexStatus">重建状态：{{ ({ queued: '排队中', running: '进行中', complete: '完成', failed: '失败', expired: '已过期', unknown: '创建结果未知，可重新发起'  } as Record<string, string>)[reindexStatus] }}；成功 {{ reindexCounts.success_count }}，失败 {{ reindexCounts.failed_count }}，已被新版本替代 {{ reindexCounts.superseded_count }}</span>
+    </div>
     <!-- 顶部同步栏 -->
     <div class="sync-bar">
       <el-link href="https://github.com/talesofai/comfyui-browser/wiki/How-to-use-Sync-in-the-Saves-tab" target="_blank"
@@ -21,7 +26,7 @@
     </div>
 
     <!-- 文件列表 -->
-    <FileCardList :files="allFiles" :loading="loading" :enable-image-preview="true" :folder-type="folderType"
+    <FileCardList :scope-revision="scopeRevision" @visible-files="updateVisibleFiles" @stale="requestScopeRefresh" @reindex="startReindex" :files="allFiles" :loading="loading" :enable-image-preview="true" :folder-type="folderType"
       :folder-path="currentFolderPath" :empty-description="t('collectionsTab.emptyText')" @file-click="handleFileClick" @refresh="loadFiles">
       <template #header>
         <el-breadcrumb separator="/" class="breadcrumb">
@@ -72,17 +77,18 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue'
+import directoryPage from '@/utils/directory-page'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, QuestionFilled } from '@element-plus/icons-vue'
-import { fetchFilesList, deleteFile, updateFile, openFolderOnSystem } from '@/api/files'
+import { deleteFile, updateFile, openFolderOnSystem } from '@/api/files'
 import { getBrowserConfig, updateBrowserConfig, syncCollections } from '@/api/collections'
 import type { FileInfo, FolderType } from '@/types'
-import { processFileInfo, processDirectoryInfo } from '@/utils'
 import { batchDeleteFiles } from '@/utils/batch-actions'
 import FileCardList from '@/components/Common/FileCardList.vue'
 
 export default defineComponent({
+  mixins: [directoryPage],
   name: 'CollectionsTab',
   components: {
     Delete,
@@ -117,34 +123,7 @@ export default defineComponent({
   },
   methods: {
     async loadFiles() {
-      this.loading = true
-      try {
-        const response = await fetchFilesList(
-          this.folderType,
-          this.currentFolderPath || undefined
-        )
-
-        const processedFiles: FileInfo[] = []
-        response.files.forEach((file) => {
-          let processed: FileInfo | null = null
-          if (file.type === 'dir') {
-            processed = processDirectoryInfo(file)
-          } else {
-            processed = processFileInfo(file, this.folderType, response.files)
-          }
-
-          if (processed) {
-            processedFiles.push(processed)
-          }
-        })
-
-        this.allFiles = processedFiles
-      } catch (error) {
-        console.error('加载收藏列表失败:', error)
-        ElMessage.error(this.t('collectionsTab.loadFailed'))
-      } finally {
-        this.loading = false
-      }
+      await this.loadDirectoryScope(this.folderType, [this.currentFolderPath])
     },
     async loadConfig() {
       try {
@@ -334,11 +313,7 @@ export default defineComponent({
     setupComfyApp() {
       this.comfyApp = (window.top as any)?.app
 
-      if (window.top) {
-        window.top.addEventListener('comfyuiBrowserShow', () => {
-          this.loadFiles()
-        })
-      }
+      this.registerBrowserShow()
     }
   }
 })

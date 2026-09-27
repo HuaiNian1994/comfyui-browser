@@ -23,15 +23,15 @@ class MetadataIndexQueueTests(unittest.TestCase):
 
     def stop_workers(self):
         for queue in self.queues:
-            for _ in queue.workers: queue.task_queue.put(None)
-            for worker in queue.workers: worker.join(2)
+            queue.shutdown()
+            self.assertTrue(all(not worker.is_alive() for worker in queue.workers))
 
     def insert_file(self):
         stat = self.file.stat()
         self.db.upsert_file(self.file.name, '', 'outputs', stat.st_size, stat.st_ctime, stat.st_mtime, 'hash', {}, ['original'])
 
     def task(self):
-        record = self.db.get_files_in_folder('', 'outputs')[self.file.name]
+        record = self.db.get_file(self.file.name, '', 'outputs')
         return MetadataIndexTask(self.file.name, '', 'outputs', str(self.file), record['bytes'], record['created_at'], record['mtime'], record['hash'], record_id=record['id'], mtime_ns=self.file.stat().st_mtime_ns)
 
     def create_queue(self, extractor):
@@ -48,7 +48,7 @@ class MetadataIndexQueueTests(unittest.TestCase):
         queue.enqueue(self.task()); self.assertTrue(entered.wait(1))
         self.db.update_file_tags(self.file.name, '', 'outputs', ['edited'])
         release.set(); self.assertTrue(queue.wait_until_idle(2))
-        record = self.db.get_files_in_folder('', 'outputs')[self.file.name]
+        record = self.db.get_file(self.file.name, '', 'outputs')
         self.assertEqual(record['tags'], ['edited'])
         self.assertEqual(record['formatted_info']['models'], ['new'])
 
@@ -68,7 +68,7 @@ class MetadataIndexQueueTests(unittest.TestCase):
         queue = self.create_queue(extract); queue.enqueue(self.task()); self.assertTrue(entered.wait(1))
         self.file.write_bytes(b'changed-file'); self.insert_file()
         release.set(); self.assertTrue(queue.wait_until_idle(2))
-        self.assertEqual(self.db.get_files_in_folder('', 'outputs')[self.file.name]['formatted_info'], {})
+        self.assertEqual(self.db.get_file(self.file.name, '', 'outputs')['formatted_info'], {})
 
     def test_recreated_record_rejects_old_identity(self):
         task = self.task()
@@ -100,3 +100,31 @@ class MetadataIndexQueueTests(unittest.TestCase):
         self.assertFalse(queue.enqueue(task))
         self.assertTrue(queue.enqueue(task, force=True)); self.assertTrue(queue.wait_until_idle(2))
         self.assertEqual(queue.status(task), 'complete')
+
+    def test_shutdown_waits_for_active_worker_and_releases_queue_resources(self):
+        entered, release, closed = threading.Event(), threading.Event(), threading.Event()
+        def extract(_):
+            entered.set()
+            release.wait(2)
+            return {'parser_version': 1}
+        queue = self.create_queue(extract)
+        task = self.task()
+        queue.enqueue(task)
+        self.assertTrue(entered.wait(1))
+        def close():
+            queue.shutdown()
+            closed.set()
+        closer = threading.Thread(target=close)
+        closer.start()
+        try:
+            self.assertFalse(closed.wait(.05))
+            release.set()
+            self.assertTrue(closed.wait(2))
+            self.assertTrue(all(not worker.is_alive() for worker in queue.workers))
+            self.assertEqual(queue.pending, {})
+            self.assertEqual(queue.states, {})
+            self.assertEqual(queue.sessions, {})
+            self.assertFalse(queue.enqueue(task, force=True))
+        finally:
+            release.set()
+            closer.join(2)

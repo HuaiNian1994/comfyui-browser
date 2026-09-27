@@ -71,17 +71,20 @@ export default defineComponent({
     folderType: { type: String as PropType<FolderType>, default: 'sources' },
     folderPath: { type: String, default: '' },
   },
-  emits: ['update:modelValue'],
+  emits: ['update:modelValue', 'stale'],
   data() {
     return {
       currentIndex: this.initialIndex,
       isLoading: false,
+      detailActive: true,
+      subscribedKey: '',
       unsubscribe: null as (() => void) | null,
       requestGeneration: 0,
       metadata: { positive: '', negative: '', has_metadata: false } as ImageMetadata,
     }
   },
   computed: {
+    subscriptionKey(): string { const file = this.currentFile; return JSON.stringify([this.folderType, file?.folder_path, file?.name, file?.file_version, file?.index_generation]) },
     timingItems(): Array<{ id: string; value: number }> { return timingValues(this.formattedInfo?.generation_timing) },
     metadataSections(): MetadataSection[] { return buildMetadataSections(this.formattedInfo?.branches || [], this.formattedInfo?.stages || []) },
     previewUrls(): string[] { return this.previewFileList.map(file => file.previewUrl || '') },
@@ -101,11 +104,11 @@ export default defineComponent({
     initialIndex(value: number) {
       if (this.modelValue && value !== this.currentIndex) { this.currentIndex = value; this.subscribeToCurrentFile() }
     },
-    currentFile(value, previous) {
-      if (this.modelValue && (value?.name !== previous?.name || value?.folder_path !== previous?.folder_path)) this.subscribeToCurrentFile()
-    },
+    subscriptionKey() { if (this.modelValue) this.subscribeToCurrentFile() },
   },
   mounted() { if (this.modelValue) this.subscribeToCurrentFile() },
+  activated() { if (!this.detailActive) { this.detailActive = true; if (this.modelValue) this.subscribeToCurrentFile() } },
+  deactivated() { this.detailActive = false; this.stopSubscription() },
   beforeUnmount() { this.stopSubscription() },
   methods: {
     formatTiming(item: { id: string; value: number }): string {
@@ -114,21 +117,23 @@ export default defineComponent({
         : formatDuration(item.value, this.t('metadata.timing.seconds'), this.t('metadata.timing.minutes'))
     },
     t(key: string) { return i18n.global.t(key) },
-    stopSubscription() { this.requestGeneration += 1; this.unsubscribe?.(); this.unsubscribe = null },
+    stopSubscription() { this.subscribedKey = ''; this.requestGeneration += 1; this.unsubscribe?.(); this.unsubscribe = null },
     closePreview() { this.stopSubscription(); this.$emit('update:modelValue', false) },
     switchPreview(index: number) { this.currentIndex = index },
     subscribeToCurrentFile(refresh = false) {
+      if (!this.detailActive || (!refresh && this.unsubscribe && this.subscribedKey === this.subscriptionKey)) return
       this.stopSubscription()
       const file = this.currentFile
       this.metadata = { positive: '', negative: '', has_metadata: false }
       if (!file) { this.isLoading = false; return }
+      this.subscribedKey = this.subscriptionKey
       this.isLoading = true
       const generation = this.requestGeneration
       this.unsubscribe = subscribeMetadata(this.folderType, file.name, file.folder_path ?? this.folderPath, result => {
         if (generation !== this.requestGeneration) return
         this.metadata = result
         this.isLoading = false
-      }, refresh)
+      }, refresh, { file_version: file.file_version, index_generation: file.index_generation, stale: () => { this.stopSubscription(); this.$emit('stale', file.folder_path ?? this.folderPath) } })
     },
 
   },

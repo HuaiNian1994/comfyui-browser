@@ -4,21 +4,26 @@ from aiohttp import web
 import server
 
 from .config import BROWSER_PATH, get_collections_path, get_sources_path, get_outputs_path
-from .routes import files, sources, collections, config, downloads
+from .routes import files, sources, collections, config, downloads, thumbnails, directories
 
 # 创建应用
 browser_app = web.Application()
 
 # 注册路由
 browser_app.add_routes([
+    web.get("/directories", directories.api_get_directories),
+    web.post("/directories", directories.api_register_directory),
     # Files
     web.get("/files", files.api_get_files),
     web.delete("/files", files.api_delete_file),
     web.put("/files", files.api_update_file),
     web.get("/files/view", files.api_view_file),
     web.get("/files/metadata", files.api_get_image_metadata),
+    web.post("/files/summary-updates", files.api_get_summary_updates),
+    web.get("/files/thumbnail", thumbnails.api_get_thumbnail),
     web.post("/files/open-folder", files.api_open_folder),
     web.post("/files/reindex", files.api_reindex_files),
+    web.get("/files/reindex/{job_id}", files.api_get_reindex_job),
     web.post("/files/tag", files.api_add_tag_to_file),
     web.delete("/files/tag", files.api_remove_tag_from_file),
     web.get("/files/tags", files.api_get_all_tags),
@@ -50,6 +55,9 @@ browser_app.add_routes([
     web.static("/s/collections", get_collections_path()),
     web.static("/s/sources", get_sources_path()),
 ])
+
+browser_app.on_cleanup.append(files.shutdown_file_services)
+browser_app.on_cleanup.append(thumbnails.shutdown_thumbnail_service)
 
 # 注册到ComfyUI Server
 server.PromptServer.instance.app.add_subapp("/browser/", browser_app)

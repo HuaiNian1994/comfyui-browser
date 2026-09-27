@@ -96,3 +96,16 @@ test('切图后旧图片响应不更新已释放的订阅', async () => {
   assert.deepEqual(values.map(value => value.positive), ['new'])
   stopB()
 })
+
+test('版本和代次隔离详情订阅，409触发目录刷新并停止重试', async () => {
+  const h = await harness(), values = [], stale = []
+  const stopA = h.subscribe('outputs', 'same.png', '', value => values.push(value), false, { file_version: 'v1', index_generation: 1 })
+  const stopB = h.subscribe('outputs', 'same.png', '', value => values.push(value), false, { file_version: 'v2', index_generation: 2, stale: () => stale.push(true) })
+  assert.equal(h.requests.length, 2)
+  assert.equal(h.requests[1].args[3].file_version, 'v2')
+  assert.equal(h.requests[1].args[3].index_generation, 2)
+  h.requests[1].reject({ response: { status: 409 } }); await flush()
+  assert.equal(stale.length, 1); assert.equal(h.timers.size, 0)
+  h.requests[0].resolve({ ...ready, file_version: 'wrong', index_generation: 1 }); await flush(); assert.equal(values.length, 0)
+  stopA(); stopB()
+})

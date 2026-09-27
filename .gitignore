@@ -9,3 +9,5 @@ web-ui/release/
 .timing-e2e/
 !docs/GENERATION_TIMING.md
 !docs/TIMING_ACCEPTANCE.md
+.cache/thumbnails/
+.browser-directories.json

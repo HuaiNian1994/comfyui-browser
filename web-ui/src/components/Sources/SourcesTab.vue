@@ -49,12 +49,18 @@
 
     <!-- Content -->
     <div class="content">
+    <div v-if="directoryErrors.length || summaryPaused || reindexStatus" class="directory-status">
+      <span v-for="path in directoryErrors" :key="path">目录 {{ path || '/' }} 加载失败 <el-button link @click="requestScopeRefresh(path)">重试</el-button></span>
+      <span v-if="summaryPaused">摘要更新已暂停 <el-button link @click="retrySummary">重试</el-button></span>
+      <span v-if="reindexStatus">重建状态：{{ ({ queued: '排队中', running: '进行中', complete: '完成', failed: '失败', expired: '已过期', unknown: '创建结果未知，可重新发起'  } as Record<string, string>)[reindexStatus] }}；成功 {{ reindexCounts.success_count }}，失败 {{ reindexCounts.failed_count }}，已被新版本替代 {{ reindexCounts.superseded_count }}</span>
+    </div>
+
       <div v-if="!currentSource" class="empty-selection">
         <el-empty :description="t('sourcesTab.selectSource')" />
       </div>
 
       <!-- 文件列表 -->
-      <FileCardList v-else :files="allFiles" :loading="loadingFiles" :enable-image-preview="true"
+      <FileCardList :scope-revision="scopeRevision" @visible-files="updateVisibleFiles" @stale="requestScopeRefresh" @reindex="startReindex" v-else :files="allFiles" :loading="loadingFiles" :enable-image-preview="true"
         :folder-type="'sources'" :folder-path="currentFolderPath" :empty-description="t('sourcesTab.emptyFiles')" @file-click="handleFileClick" @refresh="loadFiles">
         <template #header>
           <el-breadcrumb separator="/" class="breadcrumb">
@@ -130,18 +136,19 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue'
+import directoryPage from '@/utils/directory-page'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Document, Link, Refresh, Delete } from '@element-plus/icons-vue'
 import { fetchSources, fetchAllSources, addSource, deleteSource, syncSource } from '@/api/sources'
-import { fetchFilesList, openFolderOnSystem } from '@/api/files'
+import { openFolderOnSystem } from '@/api/files'
 import type { Source } from '@/api/sources'
 import type { FileInfo, FolderType } from '@/types'
-import { processFileInfo, processDirectoryInfo } from '@/utils'
 import { batchCollectFiles } from '@/utils/batch-actions'
 import FileCardList from '@/components/Common/FileCardList.vue'
 
 export default defineComponent({
+  mixins: [directoryPage],
   name: 'SourcesTab',
   components: {
     Plus,
@@ -281,7 +288,7 @@ export default defineComponent({
         this.loadSources()
         if (this.currentSource?.name === source.name) {
           this.currentSource = null
-          this.allFiles = []
+          this.loadFiles()
         }
       } catch (error) {
         if (error !== 'cancel') {
@@ -310,36 +317,7 @@ export default defineComponent({
 
     // File List Methods
     async loadFiles() {
-      if (!this.currentSource) return
-
-      this.loadingFiles = true
-      try {
-        const response = await fetchFilesList(
-          'sources' as FolderType,
-          this.currentFolderPath
-        )
-
-        const processedFiles: FileInfo[] = []
-        response.files.forEach((file) => {
-          let processed: FileInfo | null = null
-          if (file.type === 'dir') {
-            processed = processDirectoryInfo(file)
-          } else {
-            processed = processFileInfo(file, 'sources' as FolderType, response.files)
-          }
-
-          if (processed) {
-            processedFiles.push(processed)
-          }
-        })
-
-        this.allFiles = processedFiles
-      } catch (error) {
-        console.error('Load files failed:', error)
-        ElMessage.error(this.t('sourcesTab.loadFilesFailed'))
-      } finally {
-        this.loadingFiles = false
-      }
+      await this.loadDirectoryScope('sources', this.currentSource ? [this.currentFolderPath] : [])
     },
     navigateToPath(index: number) {
       if (!this.currentSource) return
@@ -394,6 +372,7 @@ export default defineComponent({
     },
     setupComfyApp() {
       this.comfyApp = (window.top as any)?.app
+      this.registerBrowserShow()
     }
   }
 })

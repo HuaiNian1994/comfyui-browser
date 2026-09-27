@@ -1,7 +1,9 @@
 """文件索引数据库：轻量摘要、批量身份同步和版本条件提交。"""
 import sqlite3
 import json
+from pathlib import Path
 from contextlib import contextmanager
+from ..constants import WHITE_EXTENSIONS
 
 SUMMARY_FIELDS = ('width', 'height', 'models', 'loras', 'parser_version', 'parse_status')
 
@@ -46,6 +48,10 @@ class DBService:
                 if name not in columns:
                     conn.execute(f'ALTER TABLE files ADD COLUMN {name} {definition}')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_folder ON files(folder_path,folder_type)')
+            # 清理所有目录的历史非媒体索引，磁盘文件保持原样。
+            media_conditions = ' OR '.join('LOWER(SUBSTR(filename, ?)) = ?' for _ in WHITE_EXTENSIONS)
+            media_params = [value for extension in WHITE_EXTENSIONS for value in (-len(extension), extension)]
+            conn.execute(f'DELETE FROM files WHERE NOT ({media_conditions})', media_params)
 
     @staticmethod
     def decode(row):
@@ -104,6 +110,8 @@ class DBService:
         try:
             operations = 0
             for item, old in changes:
+                if Path(item['name']).suffix.lower() not in WHITE_EXTENSIONS:
+                    continue
                 values = (item['bytes'],item['created_at'],item['mtime'],item['mtime_ns'],item['hash'])
                 if old:
                     if old.get('mtime_ns') is None and old['mtime']==item['mtime'] and old['bytes']==item['bytes']:
@@ -125,6 +133,8 @@ class DBService:
             conn.close()
 
     def upsert_file(self,filename,folder_path,folder_type,bytes_size,created_at,mtime,hash_val,formatted_info,tags=None,mtime_ns=None):
+        if Path(filename).suffix.lower() not in WHITE_EXTENSIONS:
+            return
         with self.connection() as conn:
             conn.execute('''INSERT INTO files(filename,folder_path,folder_type,bytes,created_at,mtime,mtime_ns,hash,formatted_info,summary,tags,index_generation) VALUES(?,?,?,?,?,?,?,?,?,?,?,1)
                 ON CONFLICT(filename,folder_path,folder_type) DO UPDATE SET bytes=excluded.bytes,created_at=excluded.created_at,mtime=excluded.mtime,mtime_ns=excluded.mtime_ns,hash=excluded.hash,formatted_info=excluded.formatted_info,summary=excluded.summary,tags=COALESCE(?,files.tags),index_generation=files.index_generation+1''',

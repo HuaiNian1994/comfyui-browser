@@ -329,6 +329,32 @@ class ScanLifecycleTests(unittest.IsolatedAsyncioTestCase):
             release.set();service.shutdown()
 
 class DatabaseMigrationTests(unittest.TestCase):
+    def test_migration_removes_non_media_from_all_folders(self):
+        with tempfile.TemporaryDirectory() as directory:
+            filename = str(Path(directory) / 'index.db')
+            database = DBService(filename)
+            names = ['image.PNG', 'video.MP4', 'parameter-check.json', 'page.HTML', 'notes.txt', 'image.png.info', 'README']
+            with database.connection() as conn:
+                for folder_type in ('outputs', 'collections', 'sources'):
+                    conn.executemany('INSERT INTO files(filename,folder_path,folder_type) VALUES(?,?,?)',
+                                     [(name, 'unvisited', folder_type) for name in names])
+            for _ in range(2):
+                database = DBService(filename)
+                with database.connection() as conn:
+                    rows = conn.execute('SELECT filename FROM files').fetchall()
+                self.assertEqual(sorted(row['filename'] for row in rows), sorted(['image.PNG', 'video.MP4'] * 3))
+
+    def test_write_entries_only_store_media(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = DBService(str(Path(directory) / 'index.db'))
+            names = ['image.PNG', 'video.MP4', 'workflow.json', 'page.html', 'notes.txt', 'image.png.info']
+            for name in names:
+                database.upsert_file(name, 'direct', 'outputs', 1, 1, 1, name, {})
+            changes = [(dict(name=name, bytes=1, created_at=1, mtime=1, mtime_ns=1, hash=name), None) for name in names]
+            database.sync_identities('batch', 'outputs', changes)
+            for folder in ('direct', 'batch'):
+                self.assertEqual(set(database.get_files_in_folder(folder, 'outputs')), {'image.PNG', 'video.MP4'})
+
     def test_repeatable_migration_derives_summary_without_reparse(self):
         with tempfile.TemporaryDirectory() as directory:
             filename=str(Path(directory)/'old.db')

@@ -94,17 +94,17 @@ class ExternalDirectoryTests(unittest.IsolatedAsyncioTestCase):
         outside_relative=os.path.relpath(self.external,self.outputs)
         self.assertEqual((await self.register(outside_relative))['path'],first['path'])
 
-    async def test_external_json_tags_notes_rename_collection_and_delete(self):
-        source=self.external/'工作 流#.json';source.write_text('{"nodes":[]}',encoding='utf-8')
+    async def test_external_video_tags_notes_rename_collection_and_delete(self):
+        source=self.external/'视频#.mp4';source.write_text('{"nodes":[]}',encoding='utf-8')
         entry=await self.register()
         identity={'folder_type':'outputs','folder_path':entry['path'],'filename':source.name}
         response=await self.client.get('/files',params={'folder_type':'outputs','folder_path':entry['path']})
         self.assertEqual(response.status,200)
         response=await self.client.post('/files/tag',json=dict(identity,tag='用户标签'))
         self.assertEqual((await response.json())['tags'],['用户标签'])
-        response=await self.client.post('/files/update',json=dict(identity,new_data={'filename':'新工作流.json','notes':'用户备注'}))
+        response=await self.client.post('/files/update',json=dict(identity,new_data={'filename':'新视频.mp4','notes':'用户备注'}))
         self.assertEqual(response.status,201)
-        identity['filename']='新工作流.json'
+        identity['filename']='新视频.mp4'
         renamed=self.external/identity['filename']
         self.assertTrue(renamed.exists());self.assertFalse(source.exists())
         record=self.db.get_file(identity['filename'],entry['path'],'outputs')
@@ -113,7 +113,7 @@ class ExternalDirectoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await response.read(),renamed.read_bytes())
         response=await self.client.post('/collections',json=identity)
         self.assertEqual(response.status,201)
-        copied=list(self.collections.glob('新工作流_*.json'))
+        copied=list(self.collections.glob('新视频_*.mp4'))
         self.assertTrue(copied);self.assertEqual(copied[-1].read_bytes(),renamed.read_bytes())
         response=await self.client.post('/files/untag',json=dict(identity,tag='用户标签'))
         self.assertEqual((await response.json())['tags'],[])
@@ -144,8 +144,8 @@ class ExternalDirectoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(link.name,[row['name'] for row in (await response.json())['files']])
 
     async def test_external_reindex_async_only_current_layer(self):
-        (self.external/'one.json').write_text('{}')
-        child=self.external/'child';child.mkdir();(child/'two.json').write_text('{}')
+        (self.external/'one.mp4').write_text('{}')
+        child=self.external/'child';child.mkdir();(child/'two.mp4').write_text('{}')
         entry=await self.register()
         response=await self.client.post('/files/reindex',json={'folder_type':'outputs','folder_paths':[entry['path']]})
         self.assertEqual(response.status,202)
@@ -155,7 +155,7 @@ class ExternalDirectoryTests(unittest.IsolatedAsyncioTestCase):
             if result['status']=='complete':break
             await asyncio.sleep(.02)
         self.assertEqual(result['indexed_folders'],1);self.assertEqual(result['indexed_files'],1)
-        self.assertIsNone(self.db.get_file('two.json',entry['path']+'/child','outputs'))
+        self.assertIsNone(self.db.get_file('two.mp4',entry['path']+'/child','outputs'))
 
     async def test_concurrent_rename_same_destination_preserves_both_inputs(self):
         (self.external/'first.json').write_text('first')

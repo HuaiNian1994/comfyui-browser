@@ -3,7 +3,7 @@
 # 文件扩展名
 IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
 VIDEO_EXTENSIONS = ['.mp4', '.mov', '.avi', '.webm', '.mkv']
-WHITE_EXTENSIONS = ['.json', '.html'] + IMAGE_EXTENSIONS + VIDEO_EXTENSIONS
+WHITE_EXTENSIONS = IMAGE_EXTENSIONS + VIDEO_EXTENSIONS
 
 # 文件后缀
 INFO_FILE_SUFFIX = '.info'

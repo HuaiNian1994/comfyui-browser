@@ -97,6 +97,22 @@ class DirectoryIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 200)
         return (await response.json())['files']
 
+    async def test_listing_and_index_only_include_media_and_keep_directories(self):
+        self.make_image('image.PNG')
+        (self.directory / 'video.MP4').write_bytes(b'video')
+        (self.directory / 'child.json').mkdir()
+        excluded = ['parameter-check.json', 'workflow.json', 'page.HTML', 'notes.txt', 'image.PNG.info']
+        for name in excluded:
+            (self.directory / name).write_text('{}', encoding='utf-8')
+        # 模拟运行中的旧索引，目录同步应移除已排除的文件记录。
+        with self.db.connection() as conn:
+            conn.execute('INSERT INTO files(filename,folder_path,folder_type,mtime,bytes) VALUES(?,?,?,?,?)',
+                         ('parameter-check.json', self.folder, 'outputs', 1, 2))
+        rows = await self.listing()
+        self.assertEqual({row['name'] for row in rows}, {'image.PNG', 'video.MP4', 'child.json'})
+        self.assertEqual(set(self.db.get_files_in_folder(self.folder, 'outputs')), {'image.PNG', 'video.MP4'})
+        self.assertTrue(all((self.directory / name).exists() for name in excluded))
+
     @staticmethod
     def identity(file):
         return {key: file[key] for key in ('folder_path', 'name', 'file_version', 'index_generation')}

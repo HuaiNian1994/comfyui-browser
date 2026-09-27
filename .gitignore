@@ -5,3 +5,7 @@ download_logs/
 web-ui/release/
 *.md
 !docs/METADATA_SUPPORT.md
+
+.timing-e2e/
+!docs/GENERATION_TIMING.md
+!docs/TIMING_ACCEPTANCE.md

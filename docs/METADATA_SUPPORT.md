@@ -2,7 +2,7 @@
 
 由 `python scripts/metadata_support.py --write` 从节点注册表生成。
 
-解析版本：2；契约快照：1013 个节点；登记适配：378 个节点。
+解析版本：3；契约快照：1013 个节点；登记适配：378 个节点。
 
 ## 适配基线
 
@@ -448,6 +448,389 @@
 | `unCLIPCheckpointLoader`<br>nodes | `clip`, `model`, `vae` | `ckpt_name` | 0: `MODEL`, 1: `CLIP`, 2: `VAE`, 3: `CLIP_VISION` | 按输出端口区分模型、内置编码器与内置 VAE；随机选模结果未保存时标未知。<br>外部数据、运行时选择及模型相关输出未保存时，保留配置与未知原因。<br>测试：`tests/test_execution_graph.py` |
 | `unCLIPConditioning`<br>nodes | `control_settings` | `conditioning`, `clip_vision_output`, `strength`, `noise_augmentation` | 0: `CONDITIONING` | 按数据类型追踪输入资源，保留变换设置；图内明确尺寸可推导，外部图片/模型输出尺寸标未知。<br>外部数据、运行时选择及模型相关输出未保存时，保留配置与未知原因。<br>测试：`tests/test_execution_graph.py` |
 | `wanBlockSwap`<br>comfy_extras.nodes_nop | `model_settings` | `model` | 0: `MODEL` | 按数据类型追踪输入资源，保留变换设置；图内明确尺寸可推导，外部图片/模型输出尺寸标未知。<br>外部数据、运行时选择及模型相关输出未保存时，保留配置与未知原因。<br>测试：`tests/test_execution_graph.py` |
+
+## 节点运行计时
+
+| 节点 | 计时类别 | 内部计时范围 |
+|---|---|---|
+| `APG` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `AddNoise` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `AlignYourStepsScheduler` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `AnimaLLLiteApply` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Any Switch (rgthree)` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `BasicGuider` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `BasicScheduler` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `BetaSamplingScheduler` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `BlockSparseAttention` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CFGGuider` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CFGNorm` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CFGOverride` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CFGZeroStar` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPAttentionMultiply` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPLoader` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPLoaderGGUF` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPMergeAdd` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPMergeSimple` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPMergeSubtract` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPSave` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPSetLastLayer` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPTextEncode` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPTextEncodeControlnet` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPTextEncodeFlux` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPTextEncodeHiDream` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPTextEncodeHunyuanDiT` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPTextEncodeKandinsky5` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPTextEncodeLumina2` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPTextEncodePixArtAlpha` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPTextEncodeSD3` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPTextEncodeSDXL` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPTextEncodeSDXLRefiner` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPVisionEncode` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CLIPVisionLoader` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Canny` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CaseConverter` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Checkpoint Loader (LoraManager)` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CheckpointLoader` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CheckpointLoaderSimple` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CheckpointSave` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ChromaRadianceOptions` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CombineHooks2` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CombineHooks4` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CombineHooks8` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ComfyAndNode` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ComfyNotNode` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ComfyOrNode` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ComfySwitchNode` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningAverage` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningCombine` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningConcat` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningLoader` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningMultiply` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningSetArea` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningSetAreaPercentage` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningSetAreaPercentageVideo` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningSetAreaStrength` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningSetDefaultCombine` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningSetMask` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningSetProperties` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningSetPropertiesAndCombine` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningSetTimestepRange` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningTimestepsRange` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConditioningZeroOut` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Context (rgthree)` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Context Big (rgthree)` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Context Merge (rgthree)` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Context Merge Big (rgthree)` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Context Switch (rgthree)` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Context Switch Big (rgthree)` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ContextWindowsManual` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ControlNetApply` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ControlNetApplyAdvanced` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ControlNetApplySD3` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ControlNetInpaintingAliMamaApply` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ControlNetLoader` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConvertArrayToString` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ConvertDictionaryToString` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Create Hook LoRA (LoraManager)` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CreateHookKeyframe` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CreateHookKeyframesFromFloats` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CreateHookKeyframesInterpolated` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CreateHookLora` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CreateHookLoraModelOnly` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `CustomCombo` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `DiffControlNetLoader` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `DifferentialDiffusion` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `DiffusersLoader` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `DisableNoise` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `DualCFGGuider` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `DualCLIPLoader` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `DualCLIPLoaderGGUF` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `DualModelGuider` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `EasyCache` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `EmptyFlux2LatentImage` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `EmptyHunyuanImageLatent` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `EmptyImage` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `EmptyLatentImage` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `EmptyQwenImageLayeredLatentImage` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `EmptySD3LatentImage` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Epsilon Scaling` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ExponentialScheduler` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ExtendIntermediateSigmas` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `FlipSigmas` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Flux2Scheduler` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `FluxDisableGuidance` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `FluxGuidance` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `FluxKVCache` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `FluxKontextImageScale` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `FluxKontextMultiReferenceLatentMethod` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `FreSca` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `FreeU` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `FreeU_V2` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `GITSScheduler` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `GLIGENLoader` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `GLIGENTextBoxApply` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `GetImageSize` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `GrowMask` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `HiDreamO1PatchSeamSmoothing` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `HyperTile` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `HypernetworkLoader` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Ideogram4Scheduler` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Image Inset Crop (rgthree)` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Image Resize (rgthree)` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Image or Latent Size (rgthree)` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImageAddNoise` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImageBatch` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImageColorSpace` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImageCompositeMasked` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImageCrop` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImageFlip` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImageFromBatch` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImageInvert` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImageOnlyCheckpointLoader` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImagePadForOutpaint` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImageRotate` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImageScale` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImageScaleBy` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImageScaleToTotalPixels` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ImageUpscaleWithModel` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `InpaintModelConditioning` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `InstructPixToPixConditioning` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `InvertMask` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `JoinImageWithAlpha` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `JsonExtractString` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `KSampler` | `sampling` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `KSampler Config (rgthree)` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `KSamplerAdvanced` | `sampling` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `KSamplerSelect` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `KarrasScheduler` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Krea2SystemPrompt` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LTXVContextWindows` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LTXVModalityGuidance` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LTXVSpatioTemporalGuidance` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LaplaceScheduler` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentAdd` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentApplyOperation` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentApplyOperationCFG` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentBatch` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentBatchSeedBehavior` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentBlend` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentComposite` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentCompositeMasked` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentCrop` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentFlip` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentFromBatch` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentInterpolate` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentMultiply` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentOperationSharpen` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentOperationTonemapReinhard` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentRotate` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentSubtract` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentUpscale` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentUpscaleBy` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LatentUpscaleModelLoader` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LazyCache` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LoRA Text Loader (LoraManager)` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LoadImage` | `input_control` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LoadImageMask` | `input_control` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LoadImageOutput` | `input_control` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LoadLatent` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Lora Cycler (LoraManager)` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Lora Loader (LoraManager)` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Lora Loader Stack (rgthree)` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Lora Randomizer (LoraManager)` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Lora Stack Combiner (LoraManager)` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Lora Stacker (LoraManager)` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LoraLoader` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LoraLoaderBypass` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LoraLoaderBypassModelOnly` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LoraLoaderModelOnly` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `LoraModelLoader` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Mahiro` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ManualSigmas` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `MiniMaxH3AddGuide` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `MiniMaxH3FunControlNetApply` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `MiniMaxH3SigmaShift` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelAttentionBackend` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelComputeDtype` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeAdd` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeAuraflow` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeBlocks` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeCosmos14B` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeCosmos7B` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeCosmosPredict2_14B` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeCosmosPredict2_2B` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeFlux1` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeKrea2` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeLTXV` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeMochiPreview` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeQwenImage` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeSD1` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeSD2` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeSD35_Large` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeSD3_2B` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeSDXL` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeSimple` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeSubtract` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelMergeWAN2_1` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelNoiseScale` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelPatchLoader` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelSamplingAuraFlow` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelSamplingContinuousEDM` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelSamplingContinuousV` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelSamplingDiscrete` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelSamplingFlux` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelSamplingLTXV` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelSamplingSD3` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelSamplingStableCascade` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ModelSave` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `MultiGPU_WorkUnits` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `NAGuidance` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `OptimalStepsScheduler` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PairConditioningCombine` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PairConditioningSetDefaultCombine` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PairConditioningSetProperties` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PairConditioningSetPropertiesAndCombine` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PatchModelAddDownscale` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PerpNeg` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PerpNegGuider` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PerturbedAttentionGuidance` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PhotoMakerLoader` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PiDConditioning` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PolyexponentialScheduler` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Power Lora Loader (rgthree)` | `lora_application` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Power Primitive (rgthree)` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Power Prompt (rgthree)` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Power Prompt - Simple (rgthree)` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PreviewImage` | `image_save` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PrimitiveBoolean` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PrimitiveFloat` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PrimitiveInt` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PrimitiveString` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `PrimitiveStringMultiline` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Prompt (LoraManager)` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `QuadrupleCLIPLoader` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `QuadrupleCLIPLoaderGGUF` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `QwenImage21Cache` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `QwenImageDiffsynthControlnet` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Random Checkpoint Loader (LoraManager)` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Random Unet Loader (LoraManager)` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `RandomNoise` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `RebatchLatents` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ReferenceLatent` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ReferenceTimbreAudio` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `RegexExtract` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `RegexMatch` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `RegexReplace` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `RenormCFG` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `RepeatImageBatch` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `RepeatLatentBatch` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `RescaleCFG` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ResizeAndPadImage` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ResolutionSelector` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SDTurboScheduler` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SDXL Empty Latent Image (rgthree)` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SDXL Power Prompt - Positive (rgthree)` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SDXL Power Prompt - Simple / Negative (rgthree)` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SD_4XUpscale_Conditioning` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SUPIRApply` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerCustom` | `sampling` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerCustomAdvanced` | `sampling` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerDPMAdaptative` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerDPMPP_2M_SDE` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerDPMPP_2S_Ancestral` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerDPMPP_3M_SDE` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerDPMPP_SDE` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerER_SDE` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerEulerAncestral` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerEulerAncestralCFGPP` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerEulerCFGpp` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerLCM` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerLCMUpscale` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerLMS` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerSASolver` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SamplerSEEDS2` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Save Image (LoraManager)` | `image_save` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SaveAnimatedPNG` | `image_save` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SaveAnimatedWEBP` | `image_save` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SaveConditioning` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SaveImage` | `image_save` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SaveImageAdvanced` | `image_save` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SaveLatent` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ScaleROPE` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Seed (rgthree)` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SelectCLIPDevice` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SelectModelDevice` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SelectVAEDevice` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SelfAttentionGuidance` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SenseNovaSamplingOptions` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SetClipHooks` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SetFirstSigma` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SetHookKeyframes` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SetLatentNoiseMask` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SetUnionControlNetType` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SkipLayerGuidanceDiT` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SkipLayerGuidanceDiTSimple` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SkipLayerGuidanceSD3` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SplitSigmas` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `SplitSigmasDenoise` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `StableCascade_EmptyLatentImage` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `StableCascade_StageB_Conditioning` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `StableCascade_StageC_VAEEncode` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `StableZero123_Conditioning` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `StringCompare` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `StringConcatenate` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `StringContains` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `StringFormat` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `StringLength` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `StringReplace` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `StringSubstring` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `StringTrim` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `StyleModelApply` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `StyleModelLoader` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `T5TokenizerOptions` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TCFG` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TemporalScoreRescaling` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Text (LoraManager)` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TextEncodeBooguEdit` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TextEncodeJoyImageEdit` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TextEncodeKrea2` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TextEncodeMageFlowEdit` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TextEncodeQwenImage21` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TextEncodeQwenImageEdit` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TextEncodeQwenImageEditPlus` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TextEncodeZImageOmni` | `text_encoding` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ThresholdMask` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TomePatchModel` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TorchCompileModel` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TripleCLIPLoader` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TripleCLIPLoaderGGUF` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `TripoSplatSamplingPreview` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `UNETLoader` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `UNetCrossAttentionMultiply` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `UNetSelfAttentionMultiply` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `UNetTemporalAttentionMultiply` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `USOStyleReference` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `Unet Loader (LoraManager)` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `UnetLoaderGGUF` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `UnetLoaderGGUFAdvanced` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `UpscaleModelLoader` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `VAEDecode` | `vae_decode` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `VAEDecodeTiled` | `vae_decode` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `VAEEncode` | `vae_encode` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `VAEEncodeForInpaint` | `vae_encode` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `VAEEncodeTiled` | `vae_encode` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `VAELoader` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `VAESave` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `VPScheduler` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `VideoLinearCFGGuidance` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `VideoTriangleCFGGuidance` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `WanAnimate2Cache` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `WanContextWindowsManual` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `WanUni3CControlnetApply` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `ZImageFunControlnet` | `postprocess` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `unCLIPCheckpointLoader` | `model_loading` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `unCLIPConditioning` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
+| `wanBlockSwap` | `node_other` | 扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。 |
 
 ## 核查与测试
 

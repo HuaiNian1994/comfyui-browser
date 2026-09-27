@@ -154,6 +154,7 @@
     "copyFailed": "复制失败"
   },
   "metadata": {
+    "timing": {"total": "总耗时", "sampling": "采样", "average": "平均", "seconds": "秒", "minutes": "分钟", "tips": {"total": "本次任务的实际执行耗时，包含模型准备和保存，不含排队。同批图片共享此数值。", "sampling": "本次任务实际执行的采样循环累计耗时，包含循环内初始化、预览和等待，不是纯 GPU 时间。", "average": "采样累计耗时 ÷ 实际完成迭代数。不同于命令行进度条经过平滑或初始化校正的速度；批量图片不单独分摊。"}},
     "sharedStages": "共用步骤 · 分支",
     "usesSharedStages": "沿用共用步骤",
     "groups": {

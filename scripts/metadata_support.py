@@ -61,6 +61,10 @@ def render_document():
         outputs = ', '.join(f'{i}: `{t}`' for i,t in enumerate(c['outputs']))
         attrs = ', '.join(f'`{a}`' for a in property_ids(name,spec)) or '向消费节点传递属性'
         lines.append(f"| `{name}`<br>{c['module']} | {attrs} | {inputs} | {outputs} | {RULES[spec['kind']]}<br>{spec['limitation']}<br>测试：`{spec['tests'][0]}` |")
+    lines += ['', '## 节点运行计时', '', '| 节点 | 计时类别 | 内部计时范围 |', '|---|---|---|']
+    for name, spec in sorted(NODES.items()):
+        timing = spec['timing']
+        lines.append(f"| `{name}` | `{timing['category']}` | {timing['limitation']} |")
     lines += ['', '## 核查与测试', '',
               '- `python scripts/metadata_support.py --check`：检查生成清单与注册表一致。',
               '- `python scripts/metadata_support.py --compare-url http://127.0.0.1:8000`：检查节点增减、输入类型和输出端口变化。',

@@ -25,6 +25,22 @@ async function harness() {
 const ready = { positive: '', negative: '', has_metadata: true, index_status: 'complete' }
 const flush = () => new Promise(resolve => setImmediate(resolve))
 
+test('执行图已完成但计时尚在写入时继续轮询，写入完成后停止', async () => {
+  const h = await harness()
+  const values = []
+  const stop = h.subscribe('outputs', 'timed.png', '', value => values.push(value))
+  h.requests[0].resolve({ ...ready, timing_pending: true })
+  await flush()
+  assert.equal(h.timers.size, 1)
+  const [id, callback] = h.timers.entries().next().value
+  h.timers.delete(id); callback()
+  h.requests[1].resolve({ ...ready, timing_pending: false, formatted_info: { generation_timing: { total_ms: 1000 } } })
+  await flush()
+  assert.equal(h.timers.size, 0)
+  assert.equal(values[1].formatted_info.generation_timing.total_ms, 1000)
+  stop()
+})
+
 test('列表与详情共享请求，完成后停止轮询', async () => {
   const h = await harness()
   const first = [], second = []

@@ -11,7 +11,20 @@ export type FileType = 'image' | 'video' | 'json' | 'dir' | 'html'
 /**
  * 格式化后的详细信息
  */
+export interface GenerationTiming {
+  version: number
+  total_ms: number
+  sampling_ms?: number
+  iterations?: number
+  source: 'image' | 'database'
+  scope: 'whole_task'
+  sampling_complete?: boolean
+  iterations_complete?: boolean
+}
+
 export interface FormattedInfo {
+  generation_timing?: GenerationTiming
+  timing_pending?: boolean
   parser_version?: number
   parse_status?: 'complete' | 'partial' | 'missing' | 'invalid' | 'unsupported_container'
   index_status?: 'complete' | 'failed'
@@ -113,6 +126,7 @@ export interface BrowserConfig {
  * 图片元数据接口
  */
 export interface ImageMetadata {
+  timing_pending?: boolean
   index_status?: 'waiting' | 'processing' | 'complete' | 'failed'
   metadata_pending?: boolean
   positive: string

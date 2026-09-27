@@ -11,6 +11,7 @@ from ..constants import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from ..services.db_service import DBService
 from ..services.metadata_indexer import MetadataIndexQueue, MetadataIndexTask
 from ..metadata.registry import PARSER_VERSION
+from ..timing.storage import read_summary, file_lock
 
 db_service = DBService()
 metadata_index_queue = MetadataIndexQueue(db_service, extract_detailed_metadata)
@@ -98,23 +99,26 @@ def synchronize_folder(
     for item in disk_files:
         if item['type'] == 'dir':
             continue
-        record = records.get(item['name'])
-        changed = not record or record.get('mtime') != item.get('mtime') or record.get('bytes') != item.get('bytes')
-        if changed:
-            full_path = path.join(parent, normalized, item['name'])
-            tags = None
-            sidecar = get_info_filename(full_path)
-            if path.exists(sidecar):
-                try:
-                    with open(sidecar, encoding='utf-8') as stream:
-                        tags = json.load(stream).get('tags')
-                except (OSError, ValueError):
-                    pass
-            database.upsert_file(
-                filename=item['name'], folder_path=normalized, folder_type=folder_type,
-                bytes_size=item['bytes'], created_at=item['created_at'], mtime=item['mtime'],
-                hash_val=f"{full_path}{item['mtime']}{item['bytes']}", formatted_info={}, tags=tags,
-            )
+        with file_lock(path.join(parent, normalized, item['name'])):
+            stat = os.stat(path.join(parent, normalized, item['name']))
+            item.update(bytes=stat.st_size, mtime=stat.st_mtime)
+            record = database.get_files_in_folder(normalized, folder_type).get(item['name'])
+            changed = not record or record.get('mtime') != item.get('mtime') or record.get('bytes') != item.get('bytes')
+            if changed:
+                full_path = path.join(parent, normalized, item['name'])
+                tags = None
+                sidecar = get_info_filename(full_path)
+                if path.exists(sidecar):
+                    try:
+                        with open(sidecar, encoding='utf-8') as stream:
+                            tags = json.load(stream).get('tags')
+                    except (OSError, ValueError):
+                        pass
+                database.upsert_file(
+                    filename=item['name'], folder_path=normalized, folder_type=folder_type,
+                    bytes_size=item['bytes'], created_at=item['created_at'], mtime=item['mtime'],
+                    hash_val=f"{full_path}{item['mtime']}{item['bytes']}", formatted_info={}, tags=tags,
+                )
     records = database.get_files_in_folder(normalized, folder_type)
     for item in disk_files:
         if item['type'] == 'dir':
@@ -433,6 +437,10 @@ async def api_get_image_metadata(request):
                                   'formatted_info': {}, 'tags': record.get('tags', []), 'index_status': 'complete'})
     try:
         stat = os.stat(full_path)
+        if request.query.get('refresh') == '1':
+            from ..timing import storage as timing_storage
+            if timing_storage.store:
+                timing_storage.store.retry_file(full_path)
         if request.query.get('poll') == '1':
             task = create_metadata_task(record, full_path, folder_path, folder_type)
             info = record.get('formatted_info') or {}
@@ -443,11 +451,18 @@ async def api_get_image_metadata(request):
             if not latest:
                 return web.Response(status=404, text='File no longer exists')
             info = latest.get('formatted_info') or {}
+            timing, pending = read_summary(full_path)
+            if timing:
+                info['generation_timing'] = timing
+            else:
+                info.pop('generation_timing', None)
+            info['timing_pending'] = pending
             return web.json_response({
                 'positive': info.get('positive_prompt', ''), 'negative': info.get('negative_prompt', ''),
                 'has_metadata': info.get('has_metadata', False), 'formatted_info': info,
                 'tags': latest.get('tags', []), 'index_status': status,
                 'metadata_pending': status in {'waiting', 'processing'},
+                'timing_pending': info.get('timing_pending', False),
             })
         if stat.st_mtime != record['mtime'] or stat.st_size != record['bytes']:
             db_service.upsert_file(filename, folder_path, folder_type, stat.st_size, stat.st_ctime,
@@ -463,11 +478,18 @@ async def api_get_image_metadata(request):
     except FileNotFoundError:
         return web.Response(status=404, text='File no longer exists')
     info = record.get('formatted_info') or {}
+    timing, pending = read_summary(full_path)
+    if timing:
+        info['generation_timing'] = timing
+    else:
+        info.pop('generation_timing', None)
+    info['timing_pending'] = pending
     return web.json_response({
         'positive': info.get('positive_prompt', ''), 'negative': info.get('negative_prompt', ''),
         'has_metadata': info.get('has_metadata', False), 'formatted_info': info,
         'tags': record.get('tags', []), 'index_status': status,
         'metadata_pending': status in {'waiting', 'processing'},
+        'timing_pending': info.get('timing_pending', False),
     })
 
 
@@ -476,3 +498,23 @@ async def api_get_all_tags(request):
     """获取所有已使用的唯一标签"""
     all_tags = db_service.get_all_tags()
     return web.json_response({"all_tags": all_tags})
+
+
+def refresh_timed_file(full_path):
+    """嵌入计时后仅刷新匹配记录的文件与元数据字段，保留标签。"""
+    base = path.realpath(get_parent_path('outputs'))
+    if path.commonpath([base, path.realpath(full_path)]) != base:
+        return
+    relative = path.relpath(full_path, base)
+    folder = normalize_folder_path(path.dirname(relative))
+    filename = path.basename(full_path)
+    stat = os.stat(full_path)
+    info = extract_detailed_metadata(full_path)
+    info['index_status'] = 'complete'
+    conn = db_service._get_connection()
+    try:
+        with conn:
+            conn.execute("UPDATE files SET bytes=?,mtime=?,hash=?,formatted_info=? WHERE filename=? AND folder_path=? AND folder_type='outputs'",
+                         (stat.st_size, stat.st_mtime, f"{full_path}{stat.st_mtime}{stat.st_size}", json.dumps(info), filename, folder))
+    finally:
+        conn.close()

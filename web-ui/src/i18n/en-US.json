@@ -154,6 +154,7 @@
     "copyFailed": "Failed to copy"
   },
   "metadata": {
+    "timing": {"total": "Total", "sampling": "Sampling", "average": "Average", "seconds": "s", "minutes": "min", "tips": {"total": "Execution time for the whole task, including model preparation and saving, excluding queue time. Shared by images in this task.", "sampling": "Elapsed time of actual sampling loops, including initialization, previews and waits within those loops. Not pure GPU time.", "average": "Total sampling time divided by completed iterations. May differ from smoothed or initialization-adjusted console rates. Not divided by batch size."}},
     "sharedStages": "Shared steps · branches",
     "usesSharedStages": "Uses shared steps",
     "groups": {

@@ -16,6 +16,8 @@
 
 支持属性、节点端口和适配版本见 [图片属性与节点支持清单](docs/METADATA_SUPPORT.md)。升级解析规则后，浏览目录或打开图片会自动补齐历史元数据。
 
+新生成图片会自动记录任务总耗时、实际采样耗时和平均采样速度，在预览顶部显示。PNG/APNG/WebP 可携带独立计时元数据，复制或收藏后仍可读取。计时口径、覆盖限制及维护方式见 [图片生成计时](docs/GENERATION_TIMING.md)，本机真实生成结果见 [验收报告](docs/TIMING_ACCEPTANCE.md)。
+
 维护检查：`python scripts/metadata_support.py --check`；后端测试：`python -m unittest discover -s tests -v`。
 
 ## 开发

@@ -11,6 +11,7 @@ from typing import Callable, Optional
 
 from .db_service import DBService
 from ..metadata.registry import PARSER_VERSION
+from ..timing.storage import file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,7 @@ class MetadataIndexQueue:
                     logger.warning("图片元数据解析失败 filename=%s error=%s", task.filename, type(exc).__name__)
                     info = {"parser_version": task.parser_version, "index_status": "failed", "error_code": type(exc).__name__, "has_metadata": False}
                     status = "failed"
-                with self.lock:
+                with file_lock(task.file_path), self.lock:
                     if self.latest.get(self._identity(task)) == generation and self._matches_file(task):
                         committed = self.db_service.update_metadata_if_current(task, info)
                         if committed:

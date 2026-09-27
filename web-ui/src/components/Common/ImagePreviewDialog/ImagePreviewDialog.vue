@@ -8,6 +8,9 @@
           <p v-if="currentFile" class="file-facts">
             <span>{{ currentFile.formattedDatetime }}</span><span>{{ currentFile.formattedSize }}</span>
             <span v-if="formattedInfo?.width">{{ formattedInfo.width }} × {{ formattedInfo.height }} {{ formattedInfo.image_format }}</span>
+            <el-tooltip v-for="item in timingItems" :key="item.id" :content="t(`metadata.timing.tips.${item.id}`)" placement="top" :z-index="4000" :show-after="250" popper-class="metadata-help-tooltip">
+              <span class="timing-value" tabindex="0">{{ t(`metadata.timing.${item.id}`) }} {{ formatTiming(item) }}</span>
+            </el-tooltip>
           </p>
         </div>
         <div class="file-actions">
@@ -55,6 +58,7 @@ import i18n from '@/i18n'
 import { subscribeMetadata } from '@/api/metadata-subscription'
 import type { FolderType, ImageMetadata, FileInfo, FormattedInfo } from '@/types'
 import MetadataProperties from './components/MetadataProperties.vue'
+import { formatDuration, timingValues } from './utils/timing-format'
 import { buildMetadataSections, type MetadataSection } from './utils/metadata-sections'
 
 export default defineComponent({
@@ -78,6 +82,7 @@ export default defineComponent({
     }
   },
   computed: {
+    timingItems(): Array<{ id: string; value: number }> { return timingValues(this.formattedInfo?.generation_timing) },
     metadataSections(): MetadataSection[] { return buildMetadataSections(this.formattedInfo?.branches || [], this.formattedInfo?.stages || []) },
     previewUrls(): string[] { return this.previewFileList.map(file => file.previewUrl || '') },
     currentFile(): FileInfo | undefined { return this.previewFileList[this.currentIndex] },
@@ -103,6 +108,11 @@ export default defineComponent({
   mounted() { if (this.modelValue) this.subscribeToCurrentFile() },
   beforeUnmount() { this.stopSubscription() },
   methods: {
+    formatTiming(item: { id: string; value: number }): string {
+      return item.id === 'average'
+        ? `${item.value > 0 && item.value < 10 ? '<0.01' : Number((item.value / 1000).toFixed(2))} s/it`
+        : formatDuration(item.value, this.t('metadata.timing.seconds'), this.t('metadata.timing.minutes'))
+    },
     t(key: string) { return i18n.global.t(key) },
     stopSubscription() { this.requestGeneration += 1; this.unsubscribe?.(); this.unsubscribe = null },
     closePreview() { this.stopSubscription(); this.$emit('update:modelValue', false) },
@@ -132,6 +142,7 @@ export default defineComponent({
 .sidebar-header { padding: 8px 12px; border-bottom: 1px solid var(--el-border-color); display: flex; align-items: center; gap: 12px; }
 .file-basic-info { min-width: 0; flex: 1; }
 .file-name { font-size: 13px; font-weight: 600; margin: 0; overflow-wrap: anywhere; line-height: 1.4; }
+.timing-value { cursor: help; white-space: nowrap; }
 .file-facts { display: flex; flex-wrap: wrap; gap: 2px 12px; margin: 3px 0 0; font-size: 11px; color: var(--el-text-color-secondary); }
 .file-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
 .file-actions :deep(.el-button) { margin-left: 0; }

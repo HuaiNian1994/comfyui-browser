@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-PARSER_VERSION = 2
+PARSER_VERSION = 3
 CONTRACT_PATH = Path(__file__).with_name("node_contracts.json")
 CONTRACTS = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))["nodes"]
 
@@ -155,7 +155,23 @@ def property_ids(name, spec):
     return sorted(ids)
 
 
+def timing_rule(name, spec):
+    """计时分类与静态节点登记使用同一份准确类名清单。"""
+    kind = spec['kind']
+    category = {'sample': 'sampling', 'checkpoint': 'model_loading', 'loader': 'model_loading',
+                'lora': 'lora_application', 'lora_stack': 'lora_application', 'encoder': 'text_encoding',
+                'output': 'image_save'}.get(kind, 'node_other')
+    if name.startswith('VAEEncode'): category = 'vae_encode'
+    elif name.startswith('VAEDecode'): category = 'vae_decode'
+    elif name.startswith('LoadImage') or 'Preprocessor' in name: category = 'input_control'
+    elif category == 'node_other' and kind in ('transform', 'auxiliary') and any(x in name for x in ('Image', 'Mask', 'Control', 'Upscale', 'Latent')): category = 'postprocess'
+    return {'category': category, 'resource': spec.get('resource'), 'node_call': True,
+            'internal': 'standard_sampler_and_resource_hooks', 'basis': 'ComfyUI 0.37.0 function calls',
+            'limitation': '扩展内部绕过标准函数的子阶段不单独计时；节点调用仍计时。'}
+
+
 for _name, _spec in NODES.items():
+    _spec['timing'] = timing_rule(_name, _spec)
     _spec['attributes'] = property_ids(_name, _spec)
     _spec['module'] = CONTRACTS[_name]['module']
     _spec['contract'] = _name

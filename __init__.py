@@ -58,3 +58,11 @@ server.PromptServer.instance.app.add_subapp("/browser/", browser_app)
 WEB_DIRECTORY = "web-ui"
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
+
+# 计时适配失败时保留原有浏览及生成功能。
+try:
+    from .timing.hooks import install as install_generation_timing
+    install_generation_timing(files.db_service.db_path, files.refresh_timed_file)
+except Exception:
+    import logging
+    logging.getLogger(__name__).exception("生成计时初始化失败")

@@ -47,7 +47,7 @@ export function subscribeMetadata(
       if (generation !== current.generation || subscriptions.get(key) !== current) return
       current.result = result
       current.callbacks.forEach(listener => listener(result))
-      if (result.index_status === 'waiting' || result.index_status === 'processing') {
+      if (result.index_status === 'waiting' || result.index_status === 'processing' || result.timing_pending) {
         current.attempt += 1
         current.timer = setTimeout(() => void requestMetadata(false, true), Math.min(4000, 300 * 2 ** Math.min(current.attempt, 4)))
       }

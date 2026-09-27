@@ -8,6 +8,7 @@ from pathlib import Path
 from PIL import Image
 
 from ..metadata.graph import empty_metadata, parse_execution_graph
+from ..timing.storage import read_summary
 
 
 def _read_apng_prompt(image_path):
@@ -59,6 +60,10 @@ def extract_detailed_metadata(image_path: str) -> dict:
             result = empty_metadata()
             result.update(parse_status="invalid", diagnostics=[{"code": "invalid_metadata", "node_id": "", "class_type": "", "field": "prompt", "detail": type(exc).__name__}])
         result.update(width=width, height=height, image_format=image_format)
+        timing, pending = read_summary(image_path)
+        if timing:
+            result["generation_timing"] = timing
+        result["timing_pending"] = pending
         return result
 
 

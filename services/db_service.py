@@ -75,6 +75,28 @@ class DBService:
         conn.close()
         return result
 
+    def get_file(self, filename: str, folder_path: str, folder_type: str, identity_only=False):
+        """精确读取一条记录；目录身份检查只读取轻量字段。"""
+        conn = self._get_connection()
+        try:
+            fields = 'id, filename, bytes, mtime' if identity_only else '*'
+            row = conn.execute(
+                f'SELECT {fields} FROM files WHERE filename=? AND folder_path=? AND folder_type=?',
+                (filename, folder_path, folder_type),
+            ).fetchone()
+            if row is None:
+                return None
+            result = dict(row)
+            if not identity_only:
+                for field, fallback in [('formatted_info', {}), ('tags', [])]:
+                    try:
+                        result[field] = json.loads(result[field]) if result[field] else fallback
+                    except (ValueError, TypeError):
+                        result[field] = fallback
+            return result
+        finally:
+            conn.close()
+
     def upsert_file(self, 
                     filename: str, 
                     folder_path: str, 

@@ -1,4 +1,5 @@
 from aiohttp import web
+import asyncio
 import json
 from os import path
 import os
@@ -102,7 +103,7 @@ def synchronize_folder(
         with file_lock(path.join(parent, normalized, item['name'])):
             stat = os.stat(path.join(parent, normalized, item['name']))
             item.update(bytes=stat.st_size, mtime=stat.st_mtime)
-            record = database.get_files_in_folder(normalized, folder_type).get(item['name'])
+            record = database.get_file(item['name'], normalized, folder_type, identity_only=True)
             changed = not record or record.get('mtime') != item.get('mtime') or record.get('bytes') != item.get('bytes')
             if changed:
                 full_path = path.join(parent, normalized, item['name'])
@@ -146,7 +147,7 @@ async def api_get_files(request):
     if folder_path and not path.exists(target_path):
         return web.Response(status=404)
 
-    response_files = synchronize_folder(folder_path, folder_type)
+    response_files = await asyncio.to_thread(synchronize_folder, folder_path, folder_type)
 
     return web.json_response({
         'files': response_files
@@ -417,6 +418,11 @@ async def api_view_file(request):
 
 # filename, folder_path, folder_type
 async def api_get_image_metadata(request):
+    """文件读取及数据库查询放入工作线程，保持服务事件循环可响应。"""
+    return await asyncio.to_thread(get_image_metadata, request)
+
+
+def get_image_metadata(request):
     """返回缓存与任务状态；初次读取补齐版本，poll 请求仅读取。"""
     folder_type = request.query.get('folder_type', 'outputs')
     folder_path = normalize_folder_path(request.query.get('folder_path', ''))
@@ -425,7 +431,7 @@ async def api_get_image_metadata(request):
         return web.Response(status=400, text='filename is required')
     if path.basename(filename) != filename or '/' in filename or '\\' in filename:
         return web.Response(status=400, text='Invalid filename')
-    record = db_service.get_files_in_folder(folder_path, folder_type).get(filename)
+    record = db_service.get_file(filename, folder_path, folder_type)
     if not record:
         return web.Response(status=404, text='File not found in synchronized directory')
     base = path.realpath(get_parent_path(folder_type))
@@ -447,7 +453,7 @@ async def api_get_image_metadata(request):
             status = metadata_index_queue.status(task) or info.get('index_status')
             if stat.st_mtime != record['mtime'] or stat.st_size != record['bytes'] or not status:
                 status = 'failed'
-            latest = db_service.get_files_in_folder(folder_path, folder_type).get(filename)
+            latest = db_service.get_file(filename, folder_path, folder_type)
             if not latest:
                 return web.Response(status=404, text='File no longer exists')
             info = latest.get('formatted_info') or {}
@@ -467,12 +473,12 @@ async def api_get_image_metadata(request):
         if stat.st_mtime != record['mtime'] or stat.st_size != record['bytes']:
             db_service.upsert_file(filename, folder_path, folder_type, stat.st_size, stat.st_ctime,
                                    stat.st_mtime, f"{full_path}{stat.st_mtime}{stat.st_size}", {}, None)
-            record = db_service.get_files_in_folder(folder_path, folder_type)[filename]
+            record = db_service.get_file(filename, folder_path, folder_type)
         task = create_metadata_task(record, full_path, folder_path, folder_type)
         status = schedule_file_metadata(record, full_path, folder_path, folder_type, metadata_index_queue,
                                         force=request.query.get('refresh') == '1')
         # complete 状态在提交之后发布，随后读取可见的最新数据。
-        record = db_service.get_files_in_folder(folder_path, folder_type).get(filename)
+        record = db_service.get_file(filename, folder_path, folder_type)
         if not record:
             return web.Response(status=404, text='File no longer exists')
     except FileNotFoundError:

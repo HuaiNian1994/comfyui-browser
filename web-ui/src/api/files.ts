@@ -6,14 +6,15 @@ import type { FilesResponse, FolderType, ImageMetadata } from '@/types'
  */
 export const fetchFilesList = async (
   folderType: FolderType,
-  folderPath?: string
+  folderPath?: string,
+  signal?: AbortSignal
 ): Promise<FilesResponse> => {
   const params: Record<string, string> = { folder_type: folderType }
   if (folderPath) {
     params.folder_path = folderPath
   }
 
-  const response = await apiClient.get<FilesResponse>('/files', { params })
+  const response = await apiClient.get<FilesResponse>('/files', { params, signal })
   return response.data
 }
 

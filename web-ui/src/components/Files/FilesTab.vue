@@ -69,7 +69,7 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue'
-import { useI18n } from 'vue-i18n'
+import i18n from '@/i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Grid, Menu } from '@element-plus/icons-vue'
 import { fetchFilesList, deleteFile, openFolderOnSystem } from '@/api/files'
@@ -104,10 +104,6 @@ export default defineComponent({
     Menu,
     FileCardList
   },
-  setup() {
-    const { t } = useI18n()
-    return { t }
-  },
   data() {
     return {
       folderType: 'outputs' as FolderType,
@@ -115,6 +111,8 @@ export default defineComponent({
       currentFolderPath: '',
       allFiles: [] as FileInfo[],
       loading: false,
+      filesRequestGeneration: 0,
+      filesAbortController: null as AbortController | null,
       comfyApp: null as any,
       managedDirectories: [] as ManagedDirectory[],
       selectedDirectoryKeys: [] as string[],
@@ -136,7 +134,14 @@ export default defineComponent({
     this.initializeDirectories()
     this.setupComfyApp()
   },
+  beforeUnmount() {
+    this.filesRequestGeneration++
+    this.filesAbortController?.abort()
+  },
   methods: {
+    t(key: string, params?: Record<string, unknown>): string {
+      return params ? i18n.global.t(key, params) : i18n.global.t(key)
+    },
     async initializeDirectories() {
       await this.loadBrowserConfig()
       this.restoreDirectories()
@@ -345,6 +350,10 @@ export default defineComponent({
       if (this.directoryListId && !this.directoriesReady) {
         return
       }
+      const generation = ++this.filesRequestGeneration
+      this.filesAbortController?.abort()
+      const controller = new AbortController()
+      this.filesAbortController = controller
       if (!this.directoryListId && this.currentFolderPath === '') {
         // 无目录管理模式时保持现状
       } else {
@@ -354,6 +363,7 @@ export default defineComponent({
       const targetPaths = this.getTargetFolderPaths()
       if (targetPaths.length === 0) {
         this.allFiles = []
+        this.loading = false
         return
       }
 
@@ -365,10 +375,13 @@ export default defineComponent({
           targetPaths.map((path) =>
             fetchFilesList(
               this.folderType,
-              path || undefined
+              path || undefined,
+              controller.signal
             )
           )
         )
+
+        if (generation !== this.filesRequestGeneration || controller.signal.aborted) return
 
         responses.forEach((response, index) => {
           const folderPath = targetPaths[index]
@@ -392,10 +405,10 @@ export default defineComponent({
         allProcessed.sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
         this.allFiles = allProcessed
       } catch (error) {
+        if (generation !== this.filesRequestGeneration || controller.signal.aborted) return
         console.error('加载文件列表失败:', error)
-        ElMessage.error(this.t('filesTab.loadFailed'))
       } finally {
-        this.loading = false
+        if (generation === this.filesRequestGeneration) this.loading = false
       }
     },
     async openFolderInExplorer(targetPath: string) {
